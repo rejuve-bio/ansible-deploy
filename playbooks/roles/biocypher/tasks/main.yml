@@ -1,0 +1,51 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Upgrade system packages
+  apt:
+    upgrade: dist
+
+- name: Install required system packages
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - git
+      - curl
+    state: present
+
+- name: Create Poetry virtual environment
+  command: python3 -m venv /opt/poetry-venv
+  args:
+    creates: /opt/poetry-venv
+
+- name: Install Poetry in the virtual environment
+  command: /opt/poetry-venv/bin/pip install poetry
+  args:
+    creates: /opt/poetry-venv/bin/poetry
+
+- name: Clone or update the BioCypher repository
+  git:
+    repo: https://github.com/rejuve-bio/biocypher-kg.git
+    dest: /home/RejuveBio/biocypher-kg
+    version: main
+    update: yes
+  register: git_result
+
+- name: Configure Poetry to store virtualenvs in the project folder
+  command: /opt/poetry/bin/poetry config virtualenvs.in-project true
+  args:
+    chdir: /home/RejuveBio/biocypher-kg
+
+- name: Install project dependencies using Poetry
+  command: /opt/poetry/bin/poetry install --no-interaction
+  args:
+    chdir: /home/RejuveBio/biocypher-kg
+  when: git_result.changed
+
+- name: Debug message
+  debug:
+    msg: "BioCypher KG environment setup complete."
