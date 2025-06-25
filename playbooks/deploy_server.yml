@@ -1,0 +1,30 @@
+# deploy_biocypher.yml
+- name: Deploy Biocypher KG
+  hosts: biocypher
+  become: true
+  roles:
+    - biocypher
+  
+- name: Deploy Annotation Service
+  hosts: annotation
+  become: true
+  roles:
+    - annotation
+
+- name: Deploy AI_Assistant Service
+  hosts: AI_Assistant
+  become: true
+  roles:
+    - AI_Assistant
+
+- name: Deploy Hypothesis Service
+  hosts: Hypothesis
+  become: true
+  roles:
+    - Hypothesis
+    
+- name: Deploy Galaxy KG
+  hosts: Galaxy
+  become: true
+  roles:
+    - Galaxy
