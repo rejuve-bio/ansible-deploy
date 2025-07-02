@@ -1,0 +1,23 @@
+# roles/biocypher/tasks/main.yml
+- name: Fix dpkg if interrupted
+  command: sudo dpkg --configure -a
+  ignore_errors: yes
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install Python and Git
+  apt:
+    name: [python3, python3-pip, git]
+    state: present
+
+- name: Clone the Annotation repository
+  git:
+    repo: https://github.com/rejuve-bio/annotation-query-backend.git
+    dest: /home/RejuveBio/Annotation
+    version: main
+
+- name: Print Hello from Annotation role
+  debug:
+    msg: "Ansible role 'annotation'working correctly!"

@@ -1,0 +1,23 @@
+# roles/biocypher/tasks/main.yml
+- name: Fix dpkg if interrupted
+  command: sudo dpkg --configure -a
+  ignore_errors: yes
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install Python and Git
+  apt:
+    name: [python3, python3-pip, git]
+    state: present
+
+- name: Clone the Galaxy repository
+  git:
+    repo: <url>
+    dest: /home/RejuveBio/Galaxy
+    version: main
+
+- name: Print Hello from Galaxy role
+  debug:
+    msg: "Ansible role 'Galaxy'working correctly!"
