@@ -11,10 +11,11 @@
 - name: Update apt cache
   apt:
     update_cache: yes
+
 - name: Set configuration variables
   ansible.builtin.set_fact:
-    repo_url: "https://github.com/dawit-melka/custom-atomspace-builder.git"
-    install_dir: "/opt/custom-atomspace-builder"
+    repo_url: "https://github.com/rejuve-bio/custom-atomspace-builder.git"
+    install_dir: "/home/RejuveBio/Custom_Atomspace_builder"
     python_version: "3.8"
 
 - name: Install system dependencies
@@ -26,17 +27,20 @@
       - python3
       - python3-pip
       - python3-venv
+      - python3-dev
+      - python3-full
     state: present
     update_cache: yes
   when: ansible_os_family == 'Debian'
 
-- name: Clone repository
+- name: Clone repository (force overwrite)
   ansible.builtin.git:
     repo: "{{ repo_url }}"
     dest: "{{ install_dir }}"
     version: master
     clone: yes
     update: yes
+    force: yes
 
 - name: Build with Maven (skip tests)
   ansible.builtin.shell: |
@@ -65,42 +69,108 @@
     state: directory
     mode: '0755'
 
-- name: Configure app.py
-  ansible.builtin.blockinfile:
-    path: "{{ install_dir }}/app.py"
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - APP CONFIG"
-    block: |
-      HUGEGRAPH_LOADER_PATH = "./hugegraph-loader/apache-hugegraph-loader-incubating-1.5.0/bin/hugegraph-loader.sh"
-      HUGEGRAPH_HOST = "localhost"
-      HUGEGRAPH_PORT = "8080"
-      HUGEGRAPH_GRAPH = "hugegraph"
-      ANNOTATION_SERVICE_URL = "http://your-annotation-service:5800/annotation/load"
-    insertafter: "^import"
+- name: Configure config.yaml from template
+  ansible.builtin.template:
+    src: templates/config.yaml.j2
+    dest: "{{ install_dir }}/config.yaml"
+    mode: '0644'
 
-- name: Check for running uvicorn processes
-  ansible.builtin.shell: |
-    pgrep -f "uvicorn app:app"
-  register: uvicorn_processes
-  changed_when: false
+- name: Copy pre-configured .env file to remote
+  ansible.builtin.copy:
+    src: templates/custom-atomspace-builder.env
+    dest: "{{ install_dir }}/.env"
+    mode: '0640'
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Run HugeGraph Docker container
+  community.docker.docker_container:
+    name: hugegraph
+    image: hugegraph/hugegraph
+    state: started
+    restart_policy: always
+    published_ports:
+      - "8080:8080"
+      - "8182:8182"
+
+- name: Create systemd service for Uvicorn
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/uvicorn.service
+    content: |
+      [Unit]
+      Description=Uvicorn ASGI Server
+      After=network.target docker.service
+      Requires=docker.service
+
+      [Service]
+      User={{ ansible_user }}
+      Group={{ ansible_user }}
+      WorkingDirectory={{ install_dir }}
+      Environment="PATH={{ install_dir }}/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      Environment="ANNOTATION_SERVICE_TIMEOUT=5.0"
+      ExecStartPre=/bin/sleep 10
+      ExecStart={{ install_dir }}/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+      Restart=always
+      RestartSec=5
+      KillMode=process
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: 0644
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: Stop any existing uvicorn service
+  ansible.builtin.systemd:
+    name: uvicorn
+    state: stopped
   ignore_errors: yes
 
-- name: Kill existing uvicorn processes
-  ansible.builtin.shell: |
-    pkill -f "uvicorn app:app"
-  when: uvicorn_processes.rc == 0
-  ignore_errors: yes
+- name: Enable and start Uvicorn service
+  ansible.builtin.systemd:
+    name: uvicorn
+    state: started
+    enabled: yes
 
-- name: Start uvicorn service
-  ansible.builtin.shell: |
-    nohup {{ install_dir }}/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000 --reload > {{ install_dir }}/uvicorn.log 2>&1 &
-  args:
-    chdir: "{{ install_dir }}"
-  async: 60
-  poll: 0
+- name: Wait for Uvicorn to initialize
+  ansible.builtin.wait_for:
+    path: /etc/systemd/system/uvicorn.service
+    timeout: 30
+  register: uvicorn_wait
 
-- name: Verify service is running
-  ansible.builtin.shell: |
-    pgrep -f "uvicorn app:app"
+- name: Verify Uvicorn service status
+  ansible.builtin.systemd:
+    name: uvicorn
+    state: started
   register: uvicorn_status
+  until: uvicorn_status.state == "started"
+  retries: 5
+  delay: 5
+
+- name: Check Uvicorn process
+  ansible.builtin.shell: |
+    pgrep -f "uvicorn app:app"
+  register: uvicorn_process
   changed_when: false
-  failed_when: uvicorn_status.rc != 0
+
+- name: Verify service health
+  ansible.builtin.uri:
+    url: "http://localhost:8000/"
+    method: GET
+
+    status_code: 200
+    timeout: 10
+  register: health_check
+  until: health_check.status == 200
+  retries: 5
+  delay: 5
+  ignore_errors: yes
+
+- name: Display service status
+  ansible.builtin.debug:
+    msg:
+      - "Uvicorn systemd status: {{ uvicorn_status.state }}"
+      - "Uvicorn process running: {{ uvicorn_process.stdout != '' }}"
+      - "Health check status: {{ health_check.status | default('unknown') }}"
