@@ -1,4 +1,4 @@
-# roles/biocypher/tasks/main.yml
+---
 - name: Fix dpkg if interrupted
   command: sudo dpkg --configure -a
   ignore_errors: yes
@@ -7,17 +7,76 @@
   apt:
     update_cache: yes
 
-- name: Install Python and Git
+- name: Install required system packages
   apt:
-    name: [python3, python3-pip, git]
+    name: [python3, python3-pip, git, docker.io, docker-compose]
     state: present
+
+- name: Add current user to docker group
+  user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Start and enable Docker service
+  service:
+    name: docker
+    state: started
+    enabled: yes
 
 - name: Clone the AI_Assistant repository
   git:
-    repo: https://github.com/rejuve-bio/AI-Assistant.git
-    dest: /home/RejuveBio/AI_Assistant
+    repo: https://github.com/Abdu1964/AI-Assistant.git
+    dest: /home/RejuveBio/ai-assistant
     version: main
 
-- name: Print Hello from AI_Assistant role
+- name: Create directory for AI Assistant
+  file:
+    path: /home/RejuveBio/ai-assistant
+    state: directory
+    mode: '0755'
+
+- name: Copy .env file to remote
+  ansible.builtin.copy:
+    src: templates/.env
+    dest: /home/RejuveBio/ai-assistant/.env
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+- name: Build and start Docker containers
+  command: docker-compose up --build 
+  args:
+    chdir: /home/RejuveBio/ai-assistant
+  async: 45
+  poll: 0
+
+- name: Check if containers are running
+  command: docker-compose ps
+  args:
+    chdir: /home/RejuveBio/ai-assistant
+  register: container_status
+  changed_when: false
+
+- name: Show container status
   debug:
-    msg: "Ansible role 'AI_Assistant'working correctly!"
+    var: container_status.stdout_lines
+
+- name: Check Docker logs for errors
+  command: docker-compose logs
+  args:
+    chdir: /home/RejuveBio/ai-assistant
+  register: docker_logs
+  ignore_errors: yes
+
+- name: Show last 20 lines of logs
+  debug:
+    var: docker_logs.stdout_lines[-20:]
+
+- name: Print container status
+  debug:
+    var: docker_ps.stdout_lines
+
+- name: Print completion message
+  debug:
+    msg: "AI Assistant deployment completed! Docker containers are running."
