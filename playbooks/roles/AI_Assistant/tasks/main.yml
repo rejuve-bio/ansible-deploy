@@ -26,7 +26,7 @@
 
 - name: Clone the AI_Assistant repository
   git:
-    repo: https://github.com/Abdu1964/AI-Assistant.git
+    repo: https://github.com/rejuve-bio/AI-Assistant.git
     dest: /home/RejuveBio/ai-assistant
     version: main
 
