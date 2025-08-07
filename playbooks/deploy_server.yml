@@ -1,30 +1,46 @@
-# deploy_biocypher.yml
+#  deploy_biocypher.yml
 - name: Deploy Biocypher KG
   hosts: biocypher
   become: true
   roles:
     - biocypher
+  tags: biocypher
+  become: true
+# deploy_custom_atomspace.yml
+- name: Custom Atomspace builder
+  hosts: Custom_Atomspace_builder
+  roles:
+    - Custom_Atomspace_builder
+  tags: Custom_Atomspace_builder
+  become: true
   
+  ## deploy_annotation.yml
 - name: Deploy Annotation Service
   hosts: annotation
+  tags: annotation
   become: true
   roles:
     - annotation
-
+#deploy_ai_assistant.yml
 - name: Deploy AI_Assistant Service
   hosts: AI_Assistant
+  tags: AI_Assistant
   become: true
   roles:
     - AI_Assistant
 
+# deploy_hypothesis.yml
 - name: Deploy Hypothesis Service
   hosts: Hypothesis
   become: true
   roles:
     - Hypothesis
-    
+  tags: Hypothesis
+
+#deploy_galaxy.yml    
 - name: Deploy Galaxy KG
   hosts: Galaxy
   become: true
   roles:
     - Galaxy
+  tags: Galaxy
