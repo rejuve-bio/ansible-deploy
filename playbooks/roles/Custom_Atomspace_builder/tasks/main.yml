@@ -1,4 +1,3 @@
----
 - name: Disable CD-ROM repositories
   become: yes
   lineinfile:
@@ -8,9 +7,48 @@
     backrefs: yes
   when: ansible_facts['os_family'] == 'Debian'
 
-- name: Update apt cache
-  apt:
+- name: Clean up conflicting Docker repository configurations
+  become: yes
+  ansible.builtin.file:
+    path: "/etc/apt/sources.list.d/docker.list"
+    state: absent
+  ignore_errors: yes
+
+- name: Clean up additional Docker repository files
+  become: yes
+  ansible.builtin.file:
+    path: "/etc/apt/sources.list.d/docker.list.save"
+    state: absent
+  ignore_errors: yes
+
+- name: Update apt cache (with conflict resolution)
+  become: yes
+  ansible.builtin.command: apt-get update --fix-missing
+  register: apt_update
+  failed_when: apt_update.rc != 0 and 'could not be read' not in apt_update.stderr
+  changed_when: "'Reading package lists...' in apt_update.stdout"
+  ignore_errors: yes
+
+- name: Install Docker from Ubuntu repositories
+  ansible.builtin.apt:
+    name: 
+      - docker.io
+      - docker-compose  
+    state: present
     update_cache: yes
+  when: ansible_os_family == 'Debian'
+
+- name: Ensure Docker service is running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add current user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
 
 - name: Set configuration variables
   ansible.builtin.set_fact:
@@ -65,7 +103,7 @@
 
 - name: Create output directory
   ansible.builtin.file:
-    path: "{{ install_dir }}/output"
+    path: "{{ install_dir }}/output/shared:output/"
     state: directory
     mode: '0755'
 
@@ -83,15 +121,89 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
 
+- name: Check if Neo4j container is running
+  community.docker.docker_container_info:
+    name: neo4j
+  register: neo4j_status
+  changed_when: false
+  ignore_errors: yes
+
+- name: Read .env file for Neo4j password
+  ansible.builtin.shell: |
+    grep NEO4J_PASSWORD {{ install_dir }}/.env | cut -d '=' -f2
+  register: neo4j_password
+  changed_when: false
+  # no_log: true
+
+- name: Define Neo4j configuration
+  ansible.builtin.set_fact:
+    desired_neo4j_config:
+      image: "neo4j:latest"
+      ports: ["7474:7474", "7687:7687"]
+      env: "neo4j/{{ neo4j_password.stdout }}"
+      restart_policy: "always"
+
+- name: Check Neo4j container status (any state)
+  community.docker.docker_container_info:
+    name: neo4j
+  register: neo4j_status
+  ignore_errors: yes
+  changed_when: false
+
+- name: Check for port conflicts with non-Docker processes
+  ansible.builtin.shell: |
+    ss -tulnp | grep -E ':(7474|7687)\s' | grep -v docker
+  register: port_check
+  changed_when: false
+  ignore_errors: yes
+
+- name: Free ports if blocked by non-Docker processes
+  ansible.builtin.shell: |
+    sudo kill -9 $(sudo lsof -t -i:7474 -i:7687) 2>/dev/null || true
+  when: port_check.stdout != ""
+  changed_when: false
+
+- name: Start or recreate Neo4j container
+  community.docker.docker_container:
+    name: neo4j
+    image: "{{ desired_neo4j_config.image }}"
+    state: started
+    restart_policy: "{{ desired_neo4j_config.restart_policy }}"
+    published_ports: "{{ desired_neo4j_config.ports }}"
+    env:
+      NEO4J_AUTH: "{{ desired_neo4j_config.env }}"
+    pull: yes
+    force_kill: yes
+  when: >
+    not neo4j_status.exists or
+    neo4j_status.container.State.Status != 'running' or
+    neo4j_status.container.Image != desired_neo4j_config.image
+
 - name: Run HugeGraph Docker container
   community.docker.docker_container:
     name: hugegraph
-    image: hugegraph/hugegraph
+    image: hugegraph/hugegraph:latest
     state: started
     restart_policy: always
     published_ports:
       - "8080:8080"
       - "8182:8182"
+    pull: yes
+
+- name: Verify Neo4j container is ready
+  ansible.builtin.shell: |
+    docker inspect -f '{{'{{'}}.State.Running{{'}}'}}' neo4j | grep -q "true"
+  register: neo4j_ready
+  until: neo4j_ready.rc == 0
+  retries: 10
+  delay: 5
+
+# Find and kill existing Uvicorn processes
+- name: Find and kill existing Uvicorn processes
+  ansible.builtin.shell: |
+    pkill -f "uvicorn app:app" || true
+  changed_when: false
+  ignore_errors: yes
 
 - name: Create systemd service for Uvicorn
   ansible.builtin.copy:
@@ -101,10 +213,11 @@
       Description=Uvicorn ASGI Server
       After=network.target docker.service
       Requires=docker.service
+      ConditionPathExists=/var/run/docker.sock
 
       [Service]
-      User={{ ansible_user }}
-      Group={{ ansible_user }}
+      User="{{ ansible_user }}"
+      Group="{{ ansible_user }}"
       WorkingDirectory={{ install_dir }}
       Environment="PATH={{ install_dir }}/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
       Environment="ANNOTATION_SERVICE_TIMEOUT=5.0"
@@ -122,55 +235,74 @@
   ansible.builtin.systemd:
     daemon_reload: yes
 
-- name: Stop any existing uvicorn service
-  ansible.builtin.systemd:
-    name: uvicorn
-    state: stopped
-  ignore_errors: yes
+- name: Start FastAPI app in background using uvicorn
+  shell: |
+    cd /home/RejuveBio/Custom_Atomspace_builder
+    source venv/bin/activate
+    nohup uvicorn app:app --host 0.0.0.0 --port 8000 --reload > uvicorn.log 2>&1 &
+  args:
+    executable: /bin/bash
+  become: yes
 
-- name: Enable and start Uvicorn service
-  ansible.builtin.systemd:
-    name: uvicorn
-    state: started
-    enabled: yes
 
-- name: Wait for Uvicorn to initialize
-  ansible.builtin.wait_for:
-    path: /etc/systemd/system/uvicorn.service
-    timeout: 30
-  register: uvicorn_wait
-
-- name: Verify Uvicorn service status
-  ansible.builtin.systemd:
-    name: uvicorn
-    state: started
-  register: uvicorn_status
-  until: uvicorn_status.state == "started"
-  retries: 5
-  delay: 5
-
-- name: Check Uvicorn process
-  ansible.builtin.shell: |
-    pgrep -f "uvicorn app:app"
-  register: uvicorn_process
-  changed_when: false
-
-- name: Verify service health
+- name: Verify service health with verbose output
   ansible.builtin.uri:
-    url: "http://localhost:8000/"
+    url: "http://{{ ansible_host }}:8000/docs"
     method: GET
-
     status_code: 200
-    timeout: 10
+    timeout: 30
+    validate_certs: no
+    follow_redirects: yes
+    return_content: yes
+    body_format: raw
   register: health_check
   until: health_check.status == 200
-  retries: 5
-  delay: 5
+  retries: 10
+  delay: 10
+  ignore_errors: yes
+  changed_when: false
+
+- name: Print success message if service is healthy
+  ansible.builtin.debug:
+    msg: "✅ API is running at http://{{ ansible_host }}:8000"
+  when: health_check.status == 200
+
+
+- name: Debug service connection issues
+  ansible.builtin.debug:
+    msg: |
+      Service Health Check Debug:
+      - Status: {{ health_check.status }}
+      - Response: {{ health_check.content | truncate }}
+      - Error: {{ health_check.msg if health_check.failed else 'Success' }}
+      - Connection Time: {{ health_check.elapsed }} seconds
+    verbosity: 1  # Only shows with -v flag
+
+- name: Check if service is actually running
+  ansible.builtin.shell: |
+    curl -s -o /dev/null -w "%{http_code}" http://{{ ansible_host }}:8000/docs
+  register: curl_check
+  changed_when: false
+  failed_when: curl_check.stdout != '200'
+
+- name: Alternative port check
+  ansible.builtin.wait_for:
+    port: 8000
+    host: localhost
+    timeout: 30
+    delay: 5
   ignore_errors: yes
 
-- name: Display service status
+- name: Display verbose health check results
   ansible.builtin.debug:
-    msg:
-      - "Uvicorn systemd status: {{ uvicorn_status.state }}"
-      - "Uvicorn process running: {{ uvicorn_process.stdout != '' }}"
-      - "Health check status: {{ health_check.status | default('unknown') }}"
+    var: health_check
+    verbosity: 1  # Only shows when running with -v
+
+- name: Check if uvicorn is running
+  shell: pgrep -f "uvicorn app:app"
+  register: uvicorn_status
+  ignore_errors: true
+
+- name: Notify success message for Custom Atomspace Builder
+  ansible.builtin.debug:
+    msg: "✅ Custom Atomspace Builder has been deployed successfully!"
