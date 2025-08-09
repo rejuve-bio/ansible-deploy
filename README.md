@@ -46,42 +46,112 @@ ansible-deploy/
 │ └── tasks/main.yml
 
 ---
+# Step by Step Guide
 
-## Clone the repository
+## Ansible Deployment for the  Custom Atomspace Builder ,the Generic Annotation service and UI
 
-```bash
-git clone https://github.com/rejuve-bio/ansible-deploy.git
-cd ansible-deploy
+This guide walks through deploying the Rejuve Bio applications using Ansible.
 
-#🛠 Customize Services Before Deployment
-##Navigate to the playbooks/roles/ directory:
+## Prerequisites
 
-```bash
-cd playbooks/roles
-```
-##2.Select the service(s) you want to deploy
-##Open and edit the tasks/main.yml file inside the selected role folder(s) to match your deployment logic:
-```bash
-- name: Pull and run AI Assistant container
-  docker_container:
-    name: ai_assistant
-    image: rejuvebio/ai-assistant:latest
-    ports:
-      - "8080:8080"
-    restart_policy: always
-```
----
-#▶️ Running the Deployment
-##Deploy All Services
-###To deploy all services as defined in the deploy_server.yml playbook:
-```bash
-ansible-playbook playbooks/deploy_server.yml
-```
-##Deploy a Specific Service
-###To deploy a specific service only (e.g. biocypher):
-```bash
-ansible-playbook playbooks/deploy_server.yml --limit biocypher
-```
+- A remote server with SSH access
+- Ansible installed on your local machine
+- SSH keys configured for password-less login
 
----
+## Deployment Steps
+
+### 1. Prepare Your Remote Server
+
+If you haven't set up your remote server (where you want to deploy the application), do this first:
+
+1. Manually set up SSH access on your remote server
+2. Configure the network so your machine can connect to the server
+3. Create and copy SSH keys to the remote server:
+
+```ssh-keygen -t rsa -b 4096```
+```ssh-copy-id user@remote-server-ip```
+
+### 2. Clone the Ansible Repository
+On your local machine, run:
+
+```git clone https://github.com/Abdu1964/ansible-deploy_v2.0.git```
+```cd ansible-deploy```
+### 3. Configure Inventory File (if you are using Local server ,skip this step)
+Edit the inventory file at inventory/hosts.ini:
+```[Custom_Atomspace_builder]```
+```your_server_ip ansible_user=your_username ansible_port=22 ansible_ssh_private_key_file=~/.ssh/id_rsa ansible_become=true ansible_become_method=sudo```
+Replace these placeholders:
+
+- `your_server_ip` – Your server's IP address
+
+- `your_username` – Your SSH username
+
+- `22` – SSH port if different from default use the correct port
+
+- `~/.ssh/id_rsa` – Path to your private key
+
+
+### 4. Configure Environment Files
+For Custom Atomspace Builder:
+
+Edit these files in playbooks/roles/Custom_Atomspace_builder/templates/:
+
+```custom-atomspace-builder.env```
+```config.yaml.j2```
+
+## For Annotation Service:
+create your  .env in playbooks/roles/annotation/templates/
+
+```cd playbooks/roles/annotation/templates/```
+
+create .env and configure it
+
+## For UI :
+create your  .env in playbooks/roles/UI/templates/
+
+```cd playbooks/roles/annotation/templates/```
+
+create .env and configure it
+
+### 5. Run the Deployment (for Local Deployment)
+Execute the playbook with:
+#### to deplay only the UI
+
+```cd /ansible-deploy``` run from the root directory
+
+```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass```
+
+#### to deplay only the Custom Atomspace Builder
+
+```cd /ansible-deploy``` run from the root directory
+
+```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass```
+
+#### to deplay only the annotation
+
+```cd /ansible-deploy``` run from the root directory
+
+```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags annotation_Local --ask-become-pass```
+
+#### to deplay all
+```cd /ansible-deploy``` run from the root directory
+
+```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local --ask-become-pass```
+
+Enter your sudo password when prompted.
+
+#### to deplay on Remote server
+```update  hosts.ini```
+```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Remote,annotation_Remote,Custom_Atomspace_builder_Remote --ask-become-pass```
+
+## Summary
+-Set up SSH access to your server
+
+-Clone the Ansible repository
+
+-Configure inventory file with your server details
+
+-Update environment/config files for both services
+
+-Run the Ansible playbook
 
