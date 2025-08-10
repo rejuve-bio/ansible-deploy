@@ -81,7 +81,7 @@ If you haven't set up your remote server (where you want to deploy the applicati
 
 On your local machine, run:
 
-```git clone https://github.com/Abdu1964/ansible-deploy_v2.0.git```
+```git clone https://github.com/rejuve-bio/ansible-deploy.git```
 
 ```cd ansible-deploy```
 
