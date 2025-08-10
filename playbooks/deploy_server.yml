@@ -21,4 +21,28 @@
   roles:
     - Annotation
 
+#Remote_Deployment
+
+- name: Deploy UI Service
+  hosts: UI_Remote
+  tags: UI_Remote
+  become: true
+  roles:
+    - UI
+# deploy_custom_atomspace.yml
+- name: Custom Atomspace builder_Remote
+  hosts: Custom_Atomspace_builder_Remote
+  roles:
+    - Custom_Atomspace_builder
+  tags: Custom_Atomspace_builder_Remote
+  become: true
+  
+  ## deploy_annotation.yml
+- name: Deploy Annotation Service
+  hosts: annotation_Local_Remote
+  tags: annotation_Local_Remote
+  become: true
+  roles:
+    - Annotation
+
 
