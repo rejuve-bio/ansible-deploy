@@ -1,4 +1,4 @@
-- name: Create fresh UI directory
+- name: Create UI directory
   ansible.builtin.file:
     path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
     state: directory
@@ -6,7 +6,7 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
 
-- name: Fix ownership of annotation-ui directory (correct path)
+- name: Fix ownership of annotation-ui directory 
   become: yes
   ansible.builtin.file:
     path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
@@ -15,15 +15,15 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
 
-- name: Force clone UI repository (overwrite)
+- name: Force clone UI repository 
   ansible.builtin.git:
-    repo: "https://github.com/Abdu1964/annotation-tool.git"
+    repo: "https://github.com/yisehak-awm/annotation-tool.git"
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
     version: writer
     force: yes
     update: yes
 
-- name: Force overwrite .env file
+- name: copy .env file 
   ansible.builtin.copy:
     src: "templates/ui.env"
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/.env"
@@ -46,14 +46,14 @@
     state: present
     update_cache: yes
 
-- name: Install dependencies (with sudo)
+- name: Install dependencies
   become: yes
   become_user: "{{ ansible_user_id | default(ansible_user) }}"
   ansible.builtin.shell: "npm install"
   args:
     chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
 
-- name: Build application (with sudo but as user)
+- name: Build application
   become: yes
   become_user: "{{ ansible_user_id | default(ansible_user) }}"
   ansible.builtin.shell: "npm run build"
@@ -63,7 +63,7 @@
   environment:
     NODE_OPTIONS: "--openssl-legacy-provider"
 
-- name: Start UI application and capture correct URL (with sudo but as user)
+- name: Start UI application and capture correct URL 
   become: yes
   become_user: "{{ ansible_user_id | default(ansible_user) }}"
   ansible.builtin.shell: |
@@ -106,7 +106,7 @@
 - name: Display deployment information
   ansible.builtin.debug:
     msg: |
-      ✅ Annotation UI successfully deployed!
+      ✅ Annotation UI successfully deployed!!
       Installation directory: /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui
       Detected Application URL: {{ app_url }}
       Alternative Access URLs:
