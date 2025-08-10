@@ -19,7 +19,7 @@
   ansible.builtin.git:
     repo: "https://github.com/Abdu1964/annotation-tool.git"
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
-    version: main
+    version: writer
     force: yes
     update: yes
 
