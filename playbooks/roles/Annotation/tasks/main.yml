@@ -50,7 +50,7 @@
 
 - name: Clone the Annotation repository
   git:
-    repo: https://github.com/Abdu1964/annotation-query-backend-general.git
+    repo: https://github.com/rejuve-bio/annotation-query-backend-general.git
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation"
     version: main
     force: yes
