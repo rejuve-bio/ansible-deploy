@@ -21,7 +21,7 @@
     state: absent
   ignore_errors: yes
 
-- name: Update apt cache (with conflict resolution)
+- name: Update apt cache 
   become: yes
   ansible.builtin.command: apt-get update --fix-missing
   register: apt_update
@@ -29,7 +29,7 @@
   changed_when: "'Reading package lists...' in apt_update.stdout"
   ignore_errors: yes
 
-- name: Install Docker with conflict handling
+- name: Install Docker
   block:
     - name: Attempt standard Docker installation
       ansible.builtin.apt:
@@ -77,7 +77,7 @@
     install_dir: "/home/{{ ansible_user_id | default(ansible_user) }}/Custom_Atomspace_builder"
     python_version: "3.8"
 
-# Create installation directory with correct permissions upfront
+# Create installation directory 
 - name: Ensure installation directory exists
   ansible.builtin.file:
     path: "{{ install_dir }}"
@@ -87,7 +87,7 @@
     mode: '0775'
     recurse: yes
 
-- name: Clone repository (force overwrite)
+- name: Clone repository 
   ansible.builtin.git:
     repo: "{{ repo_url }}"
     dest: "{{ install_dir }}"
