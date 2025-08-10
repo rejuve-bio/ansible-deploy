@@ -39,8 +39,8 @@
   
   ## deploy_annotation.yml
 - name: Deploy Annotation Service
-  hosts: annotation_Local_Remote
-  tags: annotation_Local_Remote
+  hosts: annotation_Remote
+  tags: annotation_Remote
   become: true
   roles:
     - Annotation
