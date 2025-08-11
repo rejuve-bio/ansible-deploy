@@ -1,3 +1,4 @@
+---
 - name: Disable CD-ROM repositories
   become: yes
   lineinfile:
@@ -21,43 +22,49 @@
     state: absent
   ignore_errors: yes
 
-- name: Update apt cache 
+- name: Update apt cache
   become: yes
-  ansible.builtin.command: apt-get update --fix-missing
-  register: apt_update
-  failed_when: apt_update.rc != 0 and 'could not be read' not in apt_update.stderr
-  changed_when: "'Reading package lists...' in apt_update.stdout"
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
   ignore_errors: yes
 
-- name: Install Docker
+- name: Check if Docker is already working
+  ansible.builtin.command: docker --version
+  register: docker_check
+  ignore_errors: yes
+  changed_when: false
+
+- name: Remove conflicting Docker packages (only if Docker is broken or forced)
   block:
-    - name: Attempt standard Docker installation
+    - name: Stop Docker service 
+      ansible.builtin.service:
+        name: docker
+        state: stopped
+      when: docker_check is failed or force_clean_install | default(false)
+
+    - name: Remove conflicting packages
       ansible.builtin.apt:
-        name: 
+        name:
+          - containerd
+          - containerd.io
+          - docker
+          - docker-engine
           - docker.io
-          - docker-compose
-        state: present
-        update_cache: yes
-      register: docker_install
+        state: absent
+        purge: yes
+      when: docker_check is failed or force_clean_install | default(false)
       ignore_errors: yes
+  when: docker_check is failed or force_clean_install | default(false)
 
-    - name: Resolve conflicts for local installation
-      when: docker_install is failed and ansible_connection == 'local'
-      block:
-        - name: Remove conflicting containerd
-          ansible.builtin.apt:
-            name: containerd
-            state: absent
-            purge: yes
-          ignore_errors: yes
-
-        - name: Reinstall Docker after cleanup
-          ansible.builtin.apt:
-            name: 
-              - docker.io
-              - docker-compose
-            state: present
-            update_cache: yes
+- name: Install Docker and Docker Compose
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose
+    state: present
+    update_cache: yes
+  when: docker_check is failed or force_clean_install | default(false)
 
 - name: Ensure Docker service is running
   ansible.builtin.service:
@@ -77,7 +84,6 @@
     install_dir: "/home/{{ ansible_user_id | default(ansible_user) }}/Custom_Atomspace_builder"
     python_version: "3.8"
 
-# Create installation directory 
 - name: Ensure installation directory exists
   ansible.builtin.file:
     path: "{{ install_dir }}"
@@ -85,19 +91,16 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
     mode: '0775'
-    recurse: yes
 
-- name: Clone repository 
+- name: Clone repository
   ansible.builtin.git:
     repo: "{{ repo_url }}"
     dest: "{{ install_dir }}"
     version: master
-    clone: yes
-    update: yes
     force: yes
+    update: yes
 
-# Set recursive permissions for the entire directory
-- name: Set correct permissions for installation directory
+- name: Set correct permissions recursively
   ansible.builtin.file:
     path: "{{ install_dir }}"
     owner: "{{ ansible_user_id | default(ansible_user) }}"
@@ -117,8 +120,7 @@
     dest: "{{ install_dir }}/config.yaml"
     mode: '0664'
 
-# Create .env file with proper permissions
-- name: Configure .env file from template
+- name: Configure .env file
   ansible.builtin.template:
     src: templates/custom-atomspace-builder.env
     dest: "{{ install_dir }}/.env"
@@ -126,7 +128,6 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "docker"
 
-# Explicitly create .docker directory with correct permissions
 - name: Ensure .docker directory exists
   ansible.builtin.file:
     path: "{{ install_dir }}/.docker"
@@ -134,17 +135,16 @@
     mode: '0775'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "docker"
-
-- name: Fix permissions for .docker recursively
+    
+- name: Fix permissions for .docker/buildx 
   ansible.builtin.file:
     path: "{{ install_dir }}/.docker"
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "docker"
     mode: '0775'
-    recurse: yes
+    recurse: yes  # Ensures all subdirs have correct permissions
 
-# Run make build as the correct user
-- name: Run make build in the repository root
+- name: Run make build
   ansible.builtin.command: make build
   args:
     chdir: "{{ install_dir }}"
@@ -153,5 +153,5 @@
     HOME: "{{ install_dir }}"
 
 - name: Print completion message
-  debug:
-    msg: "Custom_Atomspace_builder deployment completed! Docker containers are running."
+  ansible.builtin.debug:
+    msg: "Custom Atomspace Builder deployed successfully! Docker is running."
