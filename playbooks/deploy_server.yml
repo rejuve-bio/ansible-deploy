@@ -1,46 +1,48 @@
-#  deploy_biocypher.yml
-- name: Deploy Biocypher KG
-  hosts: biocypher
+
+- name: Deploy UI Service
+  hosts: UI_Local
+  tags: UI_Local
   become: true
   roles:
-    - biocypher
-  tags: biocypher
-  become: true
+    - UI
 # deploy_custom_atomspace.yml
-- name: Custom Atomspace builder
-  hosts: Custom_Atomspace_builder
+- name: Custom Atomspace builder_Local
+  hosts: Custom_Atomspace_builder_Local
   roles:
     - Custom_Atomspace_builder
-  tags: Custom_Atomspace_builder
+  tags: Custom_Atomspace_builder_Local
   become: true
   
   ## deploy_annotation.yml
 - name: Deploy Annotation Service
-  hosts: annotation
-  tags: annotation
+  hosts: annotation_Local
+  tags: annotation_Local
   become: true
   roles:
-    - annotation
-#deploy_ai_assistant.yml
-- name: Deploy AI_Assistant Service
-  hosts: AI_Assistant
-  tags: AI_Assistant
-  become: true
-  roles:
-    - AI_Assistant
+    - Annotation
 
-# deploy_hypothesis.yml
-- name: Deploy Hypothesis Service
-  hosts: Hypothesis
-  become: true
-  roles:
-    - Hypothesis
-  tags: Hypothesis
+#Remote_Deployment
 
-#deploy_galaxy.yml    
-- name: Deploy Galaxy KG
-  hosts: Galaxy
+- name: Deploy UI Service
+  hosts: UI_Remote
+  tags: UI_Remote
   become: true
   roles:
-    - Galaxy
-  tags: Galaxy
+    - UI
+# deploy_custom_atomspace.yml
+- name: Custom Atomspace builder_Remote
+  hosts: Custom_Atomspace_builder_Remote
+  roles:
+    - Custom_Atomspace_builder
+  tags: Custom_Atomspace_builder_Remote
+  become: true
+  
+  ## deploy_annotation.yml
+- name: Deploy Annotation Service
+  hosts: annotation_Remote
+  tags: annotation_Remote
+  become: true
+  roles:
+    - Annotation
+
+

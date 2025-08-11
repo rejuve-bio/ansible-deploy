@@ -1,18 +1,17 @@
 - name: Fix dpkg if interrupted
-  command: sudo dpkg --configure -a
+  command: "{{ 'sudo' if ansible_connection != 'local' else '' }} dpkg --configure -a"
   ignore_errors: yes
+  tags: annotation
 
 - name: Update apt cache
   apt:
     update_cache: yes
+  tags: annotation
 
 - name: Gather installed packages facts
   ansible.builtin.package_facts:
     manager: auto
-
-- name: Debug installed packages keys
-  debug:
-    var: ansible_facts.packages.keys() | list
+  tags: annotation
 
 - name: Install required system packages (skip docker.io if containerd package exists)
   become: yes
@@ -24,102 +23,168 @@
       }}
     state: present
     update_cache: yes
-
+  tags: annotation
 
 - name: Ensure Docker service is running
   service:
     name: docker
     state: started
     enabled: yes
+  tags: annotation
 
 - name: Add current user to docker group
   user:
-    name: "{{ ansible_user }}"
+    name: "{{ ansible_user_id | default(ansible_user) }}"
     groups: docker
     append: yes
+  tags: annotation
 
 - name: Create project directory
   file:
-    path: /home/RejuveBio/Annotation
+    path: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation"
     state: directory
     mode: '0755'
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  tags: annotation
 
 - name: Clone the Annotation repository
   git:
     repo: https://github.com/rejuve-bio/annotation-query-backend-general.git
-    dest: /home/RejuveBio/Annotation
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation"
     version: main
     force: yes
+  tags: annotation
 
 - name: Modify requirements.txt
   replace:
-    path: /home/RejuveBio/Annotation/requirements.txt
+    path: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/requirements.txt"
     regexp: '^biocypher>=0\.5\.4$'
     replace: 'biocypher==0.5.4\npandas>=1.3.0'
     backup: yes
+  tags: annotation
 
 - name: Create required data directories
   file:
     path: "{{ item }}"
     state: directory
     mode: '0755'
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
   with_items:
-    - /home/RejuveBio/Annotation/metta_data
-    - /home/RejuveBio/Annotation/cypher_data
+    - "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/metta_data"
+    - "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/cypher_data"
+  tags: annotation
 
 - name: Copy pre-configured .env file to remote
   copy:
     src: templates/.env
-    dest: /home/RejuveBio/Annotation/.env
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/.env"
     mode: '0640'
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  tags: annotation
 
-- name: Clean up existing containers (with sudo)
+- name: Clean up existing containers
   shell: |
-    sudo docker-compose -f /home/RejuveBio/Annotation/docker-compose.yml down -v
+    {{ 'sudo' if ansible_connection != 'local' else '' }} docker-compose -f "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/docker-compose.yml" down -v
   args:
     executable: /bin/bash
   ignore_errors: yes
   register: cleanup
   changed_when: "'Stopping' in cleanup.stdout"
+  tags: annotation
 
-- name: Build and start containers (with sudo)
+- name: Build and start containers
   shell: |
-    cd /home/RejuveBio/Annotation
-    sudo docker-compose up --build -d
+    cd "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation"
+    {{ 'sudo' if ansible_connection != 'local' else '' }} docker-compose up --build -d
   args:
     executable: /bin/bash
   register: compose_up
   retries: 2
   delay: 10
   until: compose_up.rc == 0
+  tags: annotation
 
 - name: Verify container status
   shell: |
-    sudo docker ps --filter "name=annotation_service" --format "{{ '{{.Names}} {{.Status}}' }}"
+    {{ 'sudo' if ansible_connection != 'local' else '' }} docker ps --filter "name=annotation_service" --format "{{ '{{.Names}} {{.Status}}' }}"
   register: container_status
   until: "'Up' in container_status.stdout"
   retries: 5
   delay: 10
   failed_when: "'Restarting' in container_status.stdout"
+  tags: annotation
 
 - name: Get container logs if verification fails
   shell: |
-    sudo docker logs annotation_annotation_service_1 --tail 50
+    {{ 'sudo' if ansible_connection != 'local' else '' }} docker logs annotation_annotation_service_1 --tail 50
   register: container_logs
   when: container_status.failed
   changed_when: false
+  tags: annotation
 
 - name: Display container logs if deployment failed
   debug:
     var: container_logs.stdout_lines
   when: container_status.failed
+  tags: annotation
 
 - name: Print deployment success message
   debug:
     msg: "Annotation service deployed successfully and running on port 5800"
+  tags: annotation
+
+  # MORK Setup
+  
+- name: Clone MORK repository
+  git:
+    repo: https://github.com/DeazStar/MORK.git
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/MORK"
+    version: main
+    force: yes
+  tags: mork
+
+- name: Change to MORK directory and make script executable
+  shell: |
+    cd /home/{{ ansible_user_id | default(ansible_user) }}/MORK
+    chmod +x script.sh
+  args:
+    executable: /bin/bash
+  tags: mork
+
+- name: Build Docker image
+  shell: |
+    cd /home/{{ ansible_user_id | default(ansible_user) }}/MORK
+    docker build -t mork_pathmap .
+  args:
+    executable: /bin/bash
+  tags: mork
+
+- name: Clean up existing MORK container
+  shell: |
+    docker stop mork_container || true
+    docker rm mork_container || true
+  args:
+    executable: /bin/bash
+  ignore_errors: yes
+  tags: mork
+
+- name: Run MORK container
+  shell: |
+    docker run -d --name mork_container \
+    -p 8231:8231 \
+    -v /home/root/Custom_Atomspace_builder/output:/shared/output \
+    mork_pathmap
+  args:
+    executable: /bin/bash
+  tags: mork
+
+- name: Verify container is running
+  shell: docker ps -f "name=mork_container" --format "{{ '{{.Names}} {{.Status}}' }}"
+  register: container_status
+  until: "'Up' in container_status.stdout"
+  retries: 5
+  delay: 5
+  tags: mork

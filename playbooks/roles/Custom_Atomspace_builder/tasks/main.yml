@@ -21,7 +21,7 @@
     state: absent
   ignore_errors: yes
 
-- name: Update apt cache (with conflict resolution)
+- name: Update apt cache 
   become: yes
   ansible.builtin.command: apt-get update --fix-missing
   register: apt_update
@@ -29,14 +29,35 @@
   changed_when: "'Reading package lists...' in apt_update.stdout"
   ignore_errors: yes
 
-- name: Install Docker from Ubuntu repositories
-  ansible.builtin.apt:
-    name: 
-      - docker.io
-      - docker-compose  
-    state: present
-    update_cache: yes
-  when: ansible_os_family == 'Debian'
+- name: Install Docker
+  block:
+    - name: Attempt standard Docker installation
+      ansible.builtin.apt:
+        name: 
+          - docker.io
+          - docker-compose
+        state: present
+        update_cache: yes
+      register: docker_install
+      ignore_errors: yes
+
+    - name: Resolve conflicts for local installation
+      when: docker_install is failed and ansible_connection == 'local'
+      block:
+        - name: Remove conflicting containerd
+          ansible.builtin.apt:
+            name: containerd
+            state: absent
+            purge: yes
+          ignore_errors: yes
+
+        - name: Reinstall Docker after cleanup
+          ansible.builtin.apt:
+            name: 
+              - docker.io
+              - docker-compose
+            state: present
+            update_cache: yes
 
 - name: Ensure Docker service is running
   ansible.builtin.service:
@@ -46,32 +67,27 @@
 
 - name: Add current user to docker group
   ansible.builtin.user:
-    name: "{{ ansible_user }}"
+    name: "{{ ansible_user_id | default(ansible_user) }}"
     groups: docker
     append: yes
 
 - name: Set configuration variables
   ansible.builtin.set_fact:
     repo_url: "https://github.com/rejuve-bio/custom-atomspace-builder.git"
-    install_dir: "/home/RejuveBio/Custom_Atomspace_builder"
+    install_dir: "/home/{{ ansible_user_id | default(ansible_user) }}/Custom_Atomspace_builder"
     python_version: "3.8"
 
-- name: Install system dependencies
-  ansible.builtin.apt:
-    name:
-      - git
-      - maven
-      - openjdk-11-jdk
-      - python3
-      - python3-pip
-      - python3-venv
-      - python3-dev
-      - python3-full
-    state: present
-    update_cache: yes
-  when: ansible_os_family == 'Debian'
+# Create installation directory 
+- name: Ensure installation directory exists
+  ansible.builtin.file:
+    path: "{{ install_dir }}"
+    state: directory
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+    mode: '0775'
+    recurse: yes
 
-- name: Clone repository (force overwrite)
+- name: Clone repository 
   ansible.builtin.git:
     repo: "{{ repo_url }}"
     dest: "{{ install_dir }}"
@@ -80,229 +96,62 @@
     update: yes
     force: yes
 
-- name: Build with Maven (skip tests)
-  ansible.builtin.shell: |
-    mvn clean install -pl hugegraph-client,hugegraph-loader -am \
-        -Dmaven.javadoc.skip=true \
-        -DskipTests \
-        -Dcheckstyle.skip=true \
-        -Deditorconfig.skip=true
-  args:
-    chdir: "{{ install_dir }}"
-
-- name: Create Python virtual environment
-  ansible.builtin.command: "python3 -m venv {{ install_dir }}/venv"
-  args:
-    chdir: "{{ install_dir }}"
-
-- name: Install Python requirements
-  ansible.builtin.pip:
-    requirements: "{{ install_dir }}/requirements.txt"
-    virtualenv: "{{ install_dir }}/venv"
-    virtualenv_command: "python3 -m venv"
+# Set recursive permissions for the entire directory
+- name: Set correct permissions for installation directory
+  ansible.builtin.file:
+    path: "{{ install_dir }}"
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+    mode: '0775'
+    recurse: yes
 
 - name: Create output directory
   ansible.builtin.file:
     path: "{{ install_dir }}/output/shared:output/"
     state: directory
-    mode: '0755'
+    mode: '0775'
 
 - name: Configure config.yaml from template
   ansible.builtin.template:
     src: templates/config.yaml.j2
     dest: "{{ install_dir }}/config.yaml"
-    mode: '0644'
+    mode: '0664'
 
-- name: Copy pre-configured .env file to remote
-  ansible.builtin.copy:
+# Create .env file with proper permissions
+- name: Configure .env file from template
+  ansible.builtin.template:
     src: templates/custom-atomspace-builder.env
     dest: "{{ install_dir }}/.env"
-    mode: '0640'
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    mode: '0664'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "docker"
 
-- name: Check if Neo4j container is running
-  community.docker.docker_container_info:
-    name: neo4j
-  register: neo4j_status
-  changed_when: false
-  ignore_errors: yes
+# Explicitly create .docker directory with correct permissions
+- name: Ensure .docker directory exists
+  ansible.builtin.file:
+    path: "{{ install_dir }}/.docker"
+    state: directory
+    mode: '0775'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "docker"
 
-- name: Read .env file for Neo4j password
-  ansible.builtin.shell: |
-    grep NEO4J_PASSWORD {{ install_dir }}/.env | cut -d '=' -f2
-  register: neo4j_password
-  changed_when: false
-  # no_log: true
+- name: Fix permissions for .docker recursively
+  ansible.builtin.file:
+    path: "{{ install_dir }}/.docker"
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "docker"
+    mode: '0775'
+    recurse: yes
 
-- name: Define Neo4j configuration
-  ansible.builtin.set_fact:
-    desired_neo4j_config:
-      image: "neo4j:latest"
-      ports: ["7474:7474", "7687:7687"]
-      env: "neo4j/{{ neo4j_password.stdout }}"
-      restart_policy: "always"
-
-- name: Check Neo4j container status (any state)
-  community.docker.docker_container_info:
-    name: neo4j
-  register: neo4j_status
-  ignore_errors: yes
-  changed_when: false
-
-- name: Check for port conflicts with non-Docker processes
-  ansible.builtin.shell: |
-    ss -tulnp | grep -E ':(7474|7687)\s' | grep -v docker
-  register: port_check
-  changed_when: false
-  ignore_errors: yes
-
-- name: Free ports if blocked by non-Docker processes
-  ansible.builtin.shell: |
-    sudo kill -9 $(sudo lsof -t -i:7474 -i:7687) 2>/dev/null || true
-  when: port_check.stdout != ""
-  changed_when: false
-
-- name: Start or recreate Neo4j container
-  community.docker.docker_container:
-    name: neo4j
-    image: "{{ desired_neo4j_config.image }}"
-    state: started
-    restart_policy: "{{ desired_neo4j_config.restart_policy }}"
-    published_ports: "{{ desired_neo4j_config.ports }}"
-    env:
-      NEO4J_AUTH: "{{ desired_neo4j_config.env }}"
-    pull: yes
-    force_kill: yes
-  when: >
-    not neo4j_status.exists or
-    neo4j_status.container.State.Status != 'running' or
-    neo4j_status.container.Image != desired_neo4j_config.image
-
-- name: Run HugeGraph Docker container
-  community.docker.docker_container:
-    name: hugegraph
-    image: hugegraph/hugegraph:latest
-    state: started
-    restart_policy: always
-    published_ports:
-      - "8080:8080"
-      - "8182:8182"
-    pull: yes
-
-- name: Verify Neo4j container is ready
-  ansible.builtin.shell: |
-    docker inspect -f '{{'{{'}}.State.Running{{'}}'}}' neo4j | grep -q "true"
-  register: neo4j_ready
-  until: neo4j_ready.rc == 0
-  retries: 10
-  delay: 5
-
-# Find and kill existing Uvicorn processes
-- name: Find and kill existing Uvicorn processes
-  ansible.builtin.shell: |
-    pkill -f "uvicorn app:app" || true
-  changed_when: false
-  ignore_errors: yes
-
-- name: Create systemd service for Uvicorn
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/uvicorn.service
-    content: |
-      [Unit]
-      Description=Uvicorn ASGI Server
-      After=network.target docker.service
-      Requires=docker.service
-      ConditionPathExists=/var/run/docker.sock
-
-      [Service]
-      User="{{ ansible_user }}"
-      Group="{{ ansible_user }}"
-      WorkingDirectory={{ install_dir }}
-      Environment="PATH={{ install_dir }}/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      Environment="ANNOTATION_SERVICE_TIMEOUT=5.0"
-      ExecStartPre=/bin/sleep 10
-      ExecStart={{ install_dir }}/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-      Restart=always
-      RestartSec=5
-      KillMode=process
-
-      [Install]
-      WantedBy=multi-user.target
-    mode: 0644
-
-- name: Reload systemd daemon
-  ansible.builtin.systemd:
-    daemon_reload: yes
-
-- name: Start FastAPI app in background using uvicorn
-  shell: |
-    cd /home/RejuveBio/Custom_Atomspace_builder
-    source venv/bin/activate
-    nohup uvicorn app:app --host 0.0.0.0 --port 8000 --reload > uvicorn.log 2>&1 &
+# Run make build as the correct user
+- name: Run make build in the repository root
+  ansible.builtin.command: make build
   args:
-    executable: /bin/bash
-  become: yes
+    chdir: "{{ install_dir }}"
+  become: no
+  environment:
+    HOME: "{{ install_dir }}"
 
-
-- name: Verify service health with verbose output
-  ansible.builtin.uri:
-    url: "http://{{ ansible_host }}:8000/docs"
-    method: GET
-    status_code: 200
-    timeout: 30
-    validate_certs: no
-    follow_redirects: yes
-    return_content: yes
-    body_format: raw
-  register: health_check
-  until: health_check.status == 200
-  retries: 10
-  delay: 10
-  ignore_errors: yes
-  changed_when: false
-
-- name: Print success message if service is healthy
-  ansible.builtin.debug:
-    msg: "✅ API is running at http://{{ ansible_host }}:8000"
-  when: health_check.status == 200
-
-
-- name: Debug service connection issues
-  ansible.builtin.debug:
-    msg: |
-      Service Health Check Debug:
-      - Status: {{ health_check.status }}
-      - Response: {{ health_check.content | truncate }}
-      - Error: {{ health_check.msg if health_check.failed else 'Success' }}
-      - Connection Time: {{ health_check.elapsed }} seconds
-    verbosity: 1  # Only shows with -v flag
-
-- name: Check if service is actually running
-  ansible.builtin.shell: |
-    curl -s -o /dev/null -w "%{http_code}" http://{{ ansible_host }}:8000/docs
-  register: curl_check
-  changed_when: false
-  failed_when: curl_check.stdout != '200'
-
-- name: Alternative port check
-  ansible.builtin.wait_for:
-    port: 8000
-    host: localhost
-    timeout: 30
-    delay: 5
-  ignore_errors: yes
-
-- name: Display verbose health check results
-  ansible.builtin.debug:
-    var: health_check
-    verbosity: 1  # Only shows when running with -v
-
-- name: Check if uvicorn is running
-  shell: pgrep -f "uvicorn app:app"
-  register: uvicorn_status
-  ignore_errors: true
-
-- name: Notify success message for Custom Atomspace Builder
-  ansible.builtin.debug:
-    msg: "✅ Custom Atomspace Builder has been deployed successfully!"
+- name: Print completion message
+  debug:
+    msg: "Custom_Atomspace_builder deployment completed! Docker containers are running."

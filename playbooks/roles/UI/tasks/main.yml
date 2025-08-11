@@ -1,0 +1,122 @@
+- name: Create UI directory
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+
+- name: Fix ownership of annotation-ui directory 
+  become: yes
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+    state: directory
+    recurse: yes
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+
+- name: Force clone UI repository 
+  ansible.builtin.git:
+    repo: "https://github.com/yisehak-awm/annotation-tool.git"
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+    version: writer
+    force: yes
+    update: yes
+
+- name: copy .env file 
+  ansible.builtin.copy:
+    src: "templates/ui.env"
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/.env"
+    mode: '0644'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+    force: yes
+
+- name: Nuke existing node_modules
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/node_modules"
+    state: absent
+  ignore_errors: yes
+
+- name: Install Node.js and npm
+  ansible.builtin.apt:
+    name:
+      - nodejs
+      - npm
+    state: present
+    update_cache: yes
+
+- name: Install dependencies
+  become: yes
+  become_user: "{{ ansible_user_id | default(ansible_user) }}"
+  ansible.builtin.shell: "npm install"
+  args:
+    chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+
+- name: Build application
+  become: yes
+  become_user: "{{ ansible_user_id | default(ansible_user) }}"
+  ansible.builtin.shell: "npm run build"
+  args:
+    chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+    executable: /bin/bash
+  environment:
+    NODE_OPTIONS: "--openssl-legacy-provider"
+
+- name: Start UI application and capture correct URL 
+  become: yes
+  become_user: "{{ ansible_user_id | default(ansible_user) }}"
+  ansible.builtin.shell: |
+    # Start the app and capture the correct URL
+    npm start > /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/ui.log 2>&1 &
+    sleep 15
+    grep -E 'Server running on|Listening on|Application started|http://localhost|https://localhost' /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/ui.log | grep -v npmjs | tail -1 | awk '{print $NF}' > /tmp/app_url.txt
+    if [ ! -s /tmp/app_url.txt ]; then
+      ss -tulnp | grep node | awk '{print $5}' | awk -F: '{print $NF}' | head -1 > /tmp/app_url.txt
+      echo "http://localhost:$(cat /tmp/app_url.txt)" > /tmp/app_url.txt
+    fi
+  args:
+    chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+    executable: /bin/bash
+  environment:
+    NODE_ENV: production
+
+- name: Read captured URL
+  ansible.builtin.slurp:
+    src: /tmp/app_url.txt
+  register: app_url_file
+  changed_when: false
+
+- name: Set application URL
+  ansible.builtin.set_fact:
+    app_url: "{{ app_url_file.content | b64decode | trim | default('http://localhost:3000') }}"
+
+- name: Get all IPv4 addresses
+  ansible.builtin.command: "hostname -I"
+  register: ip_addresses
+
+- name: Verify UI is running
+  ansible.builtin.wait_for:
+    host: "{{ app_url.split('://')[1].split(':')[0] }}"
+    port: "{{ app_url.split(':')[-1] | regex_replace('/.*', '') | int }}"
+    delay: 10
+    timeout: 60
+    state: started
+
+- name: Display deployment information
+  ansible.builtin.debug:
+    msg: |
+      ✅ Annotation UI successfully deployed!!
+      Installation directory: /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui
+      Detected Application URL: {{ app_url }}
+      Alternative Access URLs:
+      {% for ip in ip_addresses.stdout.split() %}
+      - http://{{ ip }}:{{ app_url.split(':')[-1] | regex_replace('/.*', '') }}
+      {% endfor %}
+      Log file: /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/ui.log
+      To view live logs: tail -f /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/ui.log
+
+- name: Clean up temporary file
+  ansible.builtin.file:
+    path: /tmp/app_url.txt
+    state: absent
