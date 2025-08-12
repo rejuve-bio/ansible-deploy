@@ -15,7 +15,7 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
 
-- name: Force clone UI repository 
+- name: Clone UI repository 
   ansible.builtin.git:
     repo: "https://github.com/yisehak-awm/annotation-tool.git"
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
