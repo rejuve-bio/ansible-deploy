@@ -25,7 +25,7 @@
 
 - name: copy .env file 
   ansible.builtin.copy:
-    src: "templates/ui.env"
+    src: "templates/UI.env"
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/.env"
     mode: '0644'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
@@ -119,4 +119,5 @@
 - name: Clean up temporary file
   ansible.builtin.file:
     path: /tmp/app_url.txt
+
     state: absent
