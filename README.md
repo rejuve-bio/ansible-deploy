@@ -105,30 +105,21 @@ Replace these placeholders:
 
 
 ### 4. Configure Environment Files
-For Custom Atomspace Builder:
 
-Edit these files in playbooks/roles/Custom_Atomspace_builder/templates/:
-
-create 
-
-```custom-atomspace-builder.env```
-
-```config.yaml.j2```
-
-## For Annotation Service:
-create your  ```.env ```in playbooks/roles/annotation/templates/
-
-```cd playbooks/roles/annotation/templates/```
-
-create ```.env``` and configure it
-
-## For UI :
-create your  UI.env in playbooks/roles/UI/templates/
-
-```cd playbooks/roles/UI/templates/```
-
-create ```UI.env``` and configure it
-
+# For Custom Atomspace Builder:
+# Edit only the following lines in:
+# playbooks/roles/Custom_Atomspace_builder/templates/custom-atomspace-builder.env
+```bash
+LLM_PROVIDER="openai" or "gemini" 
+LLM_API_KEY="your_api_key_here"
+```
+# For Annotation Service:
+# Edit only the following lines in:
+# playbooks/roles/Annotation/templates/.env
+```bash
+LLM_MODEL="openai" or gemini
+OPENAI_API_KEY="your_LLM_API_KEY_here"
+```
 ### 5. Run the Deployment (for Local Deployment)
 
 Execute the playbook with:
@@ -137,33 +128,58 @@ Execute the playbook with:
 
 ```cd /ansible-deploy``` run from the root directory
 
-```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass```
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass
+```
 
 #### to deplay only the Custom Atomspace Builder
 
 ```cd /ansible-deploy``` run from the root directory
 
-```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass```
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass
+```
 
 #### to deplay only the annotation
 
 ```cd /ansible-deploy``` run from the root directory
 
-```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags annotation_Local --ask-become-pass```
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags annotation_Local --ask-become-pass
+```
 
-#### to deplay all(Local Machine)
+#### to deplay with MORK database
 
 ```cd /ansible-deploy``` run from the root directory
 
-```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local --ask-become-pass```
+```bash 
+ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags MORK_Local --ask-become-pass
+```
 
+#### to deplay all with only Neo4j database
+
+```cd /ansible-deploy``` run from the root directory 
+
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,local_network --ask-become-pass
+```
+
+#### to deplay all with MORK database
+
+```cd /ansible-deploy``` run from the root directory 
+
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,MORK_Local,local_network --ask-become-pass
+```
 Enter your sudo password when prompted.
 
 #### to deplay on Remote server
 
 ```update  hosts.ini```
 
-```ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml --tags UI_Remote,annotation_Remote,Custom_Atomspace_builder_Remote --ask-become-pass```
+```bash
+ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml --tags UI_Remote,annotation_Remote,Custom_Atomspace_builder_Remote --ask-become-pass
+```
 
 ## Summary
 -Set up SSH access to your server
