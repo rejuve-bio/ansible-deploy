@@ -1,0 +1,101 @@
+  # MORK Setup
+- name: Fix dpkg if interrupted
+  command: "{{ 'sudo' if ansible_connection != 'local' else '' }} dpkg --configure -a"
+  ignore_errors: yes
+  tags: MORK
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+  tags: MORK
+
+- name: Gather installed packages facts
+  ansible.builtin.package_facts:
+    manager: auto
+  tags: MORK
+
+- name: Install required system packages (skip docker.io if containerd package exists)
+  become: yes
+  apt:
+    name: >
+      {{
+        ['docker-compose', 'python3', 'python3-pip', 'git']
+        + ([] if (ansible_facts.packages.keys() | select('search', 'containerd') | list | length > 0) else ['docker.io'])
+      }}
+    state: present
+    update_cache: yes
+  tags: MORK
+
+- name: Ensure Docker service is running
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  tags: MORK
+
+- name: Add current user to docker group
+  user:
+    name: "{{ ansible_user_id | default(ansible_user) }}"
+    groups: docker
+    append: yes
+  tags: MORK
+
+- name: Create project directory
+  file:
+    path: "/home/{{ ansible_user_id | default(ansible_user) }}/MORK"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  tags: MORK
+  
+- name: Clone MORK repository
+  git:
+    repo: https://github.com/DeazStar/MORK.git
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/MORK"
+    version: main
+    force: yes
+  tags: MORK
+
+- name: Change to MORK directory and make script executable
+  shell: |
+    cd /home/{{ ansible_user_id | default(ansible_user) }}/MORK
+    chmod +x script.sh
+  args:
+    executable: /bin/bash
+  tags: MORK
+
+- name: Build Docker image
+  shell: |
+    cd /home/{{ ansible_user_id | default(ansible_user) }}/MORK
+    docker build -t mork_pathmap .
+  args:
+    executable: /bin/bash
+  tags: MORK
+
+- name: Clean up existing MORK container
+  shell: |
+    docker stop mork_container || true
+    docker rm mork_container || true
+  args:
+    executable: /bin/bash
+  ignore_errors: yes
+  tags: MORK
+
+- name: Run MORK container
+  shell: |
+    docker run -d --name mork_container \
+    -p 8231:8231 \
+    -v /home/root/Custom_Atomspace_builder/output:/shared/output \
+    mork_pathmap
+  args:
+    executable: /bin/bash
+  tags: MORK
+
+- name: Verify container is running
+  shell: docker ps -f "name=mork_container" --format "{{ '{{.Names}} {{.Status}}' }}"
+  register: container_status
+  until: "'Up' in container_status.stdout"
+  retries: 5
+  delay: 5
+  tags: MORK
