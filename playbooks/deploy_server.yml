@@ -23,7 +23,15 @@
   roles:
     - Annotation
 
-# Remote_Deployment
+  # deploy_MORK
+- name: Deploy MORK Service
+  hosts: MORK_Local
+  tags: MORK_Local
+  become: true
+  roles:
+    - MORK
+
+#Remote_Deployment
 
 ## deploy_UI.yml
 - name: Deploy UI Service
@@ -32,8 +40,7 @@
   become: true
   roles:
     - UI
-
-## deploy_custom_atomspace.yml
+# deploy_custom_atomspace 
 - name: Custom Atomspace builder_Remote
   hosts: Custom_Atomspace_builder_Remote
   tags: Custom_Atomspace_builder_Remote
@@ -41,7 +48,7 @@
   roles:
     - Custom_Atomspace_builder
   
-  ## deploy_annotation.yml
+  # deploy_annotation 
 - name: Deploy Annotation Service
   hosts: annotation_Remote
   tags: annotation_Remote
@@ -49,6 +56,18 @@
   roles:
     - Annotation
 
+  # deploy_MORK
+- name: Deploy MORK Service
+  hosts: MORK_Remote
+  tags: MORK_Remote
+  become: true
+  roles:
+    - MORK
 
-
-
+# Setup shared Docker network for all local services
+- name: make the same network for all docker services
+  hosts: local_network
+  tags: local_network
+  become: true
+  roles:
+    - network
