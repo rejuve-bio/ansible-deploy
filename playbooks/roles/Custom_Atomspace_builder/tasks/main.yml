@@ -1,4 +1,3 @@
----
 - name: Disable CD-ROM repositories
   become: yes
   lineinfile:
@@ -22,49 +21,43 @@
     state: absent
   ignore_errors: yes
 
-- name: Update apt cache
+- name: Update apt cache 
   become: yes
-  ansible.builtin.apt:
-    update_cache: yes
-    cache_valid_time: 3600
+  ansible.builtin.command: apt-get update --fix-missing
+  register: apt_update
+  failed_when: apt_update.rc != 0 and 'could not be read' not in apt_update.stderr
+  changed_when: "'Reading package lists...' in apt_update.stdout"
   ignore_errors: yes
 
-- name: Check if Docker is already working
-  ansible.builtin.command: docker --version
-  register: docker_check
-  ignore_errors: yes
-  changed_when: false
-
-- name: Remove conflicting Docker packages (only if Docker is broken or forced)
+- name: Install Docker
   block:
-    - name: Stop Docker service 
-      ansible.builtin.service:
-        name: docker
-        state: stopped
-      when: docker_check is failed or force_clean_install | default(false)
-
-    - name: Remove conflicting packages
+    - name: Attempt standard Docker installation
       ansible.builtin.apt:
-        name:
-          - containerd
-          - containerd.io
-          - docker
-          - docker-engine
+        name: 
           - docker.io
-        state: absent
-        purge: yes
-      when: docker_check is failed or force_clean_install | default(false)
+          - docker-compose
+        state: present
+        update_cache: yes
+      register: docker_install
       ignore_errors: yes
-  when: docker_check is failed or force_clean_install | default(false)
 
-- name: Install Docker and Docker Compose
-  ansible.builtin.apt:
-    name:
-      - docker.io
-      - docker-compose
-    state: present
-    update_cache: yes
-  when: docker_check is failed or force_clean_install | default(false)
+    - name: Resolve conflicts for local installation
+      when: docker_install is failed and ansible_connection == 'local'
+      block:
+        - name: Remove conflicting containerd
+          ansible.builtin.apt:
+            name: containerd
+            state: absent
+            purge: yes
+          ignore_errors: yes
+
+        - name: Reinstall Docker after cleanup
+          ansible.builtin.apt:
+            name: 
+              - docker.io
+              - docker-compose
+            state: present
+            update_cache: yes
 
 - name: Ensure Docker service is running
   ansible.builtin.service:
@@ -81,9 +74,10 @@
 - name: Set configuration variables
   ansible.builtin.set_fact:
     repo_url: "https://github.com/rejuve-bio/custom-atomspace-builder.git"
-    install_dir: "/home/{{ ansible_user_id | default(ansible_user) }}/Custom_Atomspace_builder"
+    install_dir: "/home/{{ ansible_user_id | default(ansible_user) }}/custom-atomspace-builder"
     python_version: "3.8"
 
+# Create installation directory 
 - name: Ensure installation directory exists
   ansible.builtin.file:
     path: "{{ install_dir }}"
@@ -91,16 +85,19 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
     mode: '0775'
+    recurse: yes
 
-- name: Clone repository
+- name: Clone repository 
   ansible.builtin.git:
     repo: "{{ repo_url }}"
     dest: "{{ install_dir }}"
     version: master
-    force: yes
+    clone: yes
     update: yes
+    force: yes
 
-- name: Set correct permissions recursively
+# Set recursive permissions for the entire directory
+- name: Set correct permissions for installation directory
   ansible.builtin.file:
     path: "{{ install_dir }}"
     owner: "{{ ansible_user_id | default(ansible_user) }}"
@@ -120,7 +117,8 @@
     dest: "{{ install_dir }}/config.yaml"
     mode: '0664'
 
-- name: Configure .env file
+# Create .env file with proper permissions
+- name: Configure .env file from template
   ansible.builtin.template:
     src: templates/custom-atomspace-builder.env
     dest: "{{ install_dir }}/.env"
@@ -128,6 +126,7 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "docker"
 
+# Explicitly create .docker directory with correct permissions
 - name: Ensure .docker directory exists
   ansible.builtin.file:
     path: "{{ install_dir }}/.docker"
@@ -135,16 +134,17 @@
     mode: '0775'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "docker"
-    
-- name: Fix permissions for .docker/buildx 
+
+- name: Fix permissions for .docker recursively
   ansible.builtin.file:
     path: "{{ install_dir }}/.docker"
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "docker"
     mode: '0775'
-    recurse: yes  # Ensures all subdirs have correct permissions
+    recurse: yes
 
-- name: Run make build
+# Run make build as the correct user
+- name: Run make build in the repository root
   ansible.builtin.command: make build
   args:
     chdir: "{{ install_dir }}"
@@ -152,6 +152,35 @@
   environment:
     HOME: "{{ install_dir }}"
 
-- name: Print completion message
-  ansible.builtin.debug:
-    msg: "Custom Atomspace Builder deployed successfully! Docker is running."
+# Check HugeGraph container status
+- name: Check HugeGraph container status
+  docker_container_info:
+    name: hugegraph-atomspace
+  register: hugegraph_service
+  ignore_errors: yes
+
+# Check AtomSpace-API container status
+- name: Check AtomSpace-API container status
+  docker_container_info:
+    name: atomspace-api
+  register: atomspace_service
+  ignore_errors: yes
+
+# Print final deployment status
+- name: Print final deployment status
+  debug:
+    msg: |
+      {% if (hugegraph_service.container is defined and hugegraph_service.container.State.Status == "running") and
+            (atomspace_service.container is defined and atomspace_service.container.State.Status == "running") %}
+      ✅ All services are up and running:
+        - HugeGraph (hugegraph-atomspace)
+        - AtomSpace-API (atomspace-api)
+      {% else %}
+      ❌ Deployment incomplete: Some services are down.
+        {% if hugegraph_service.container is not defined or hugegraph_service.container.State.Status != "running" %}
+        - HugeGraph container is DOWN. Start it with: docker-compose up -d hugegraph-atomspace
+        {% endif %}
+        {% if atomspace_service.container is not defined or atomspace_service.container.State.Status != "running" %}
+        - AtomSpace-API container is DOWN. Start it with: docker-compose up -d atomspace-api
+        {% endif %}
+      {% endif %}
