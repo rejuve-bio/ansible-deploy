@@ -15,7 +15,7 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
 
-- name: Force clone UI repository 
+- name: Clone UI repository 
   ansible.builtin.git:
     repo: "https://github.com/yisehak-awm/annotation-tool.git"
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
@@ -52,6 +52,15 @@
   ansible.builtin.shell: "npm install"
   args:
     chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+
+- name: Fix ownership of node_modules
+  become: yes
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/node_modules"
+    state: directory
+    recurse: yes
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
 
 - name: Build application
   become: yes

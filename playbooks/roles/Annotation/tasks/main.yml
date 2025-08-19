@@ -52,7 +52,7 @@
   git:
     repo: https://github.com/rejuve-bio/annotation-query-backend-general.git
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation"
-    version: main
+    version: feature/mork-support
     force: yes
   tags: annotation
 
@@ -131,60 +131,23 @@
   when: container_status.failed
   tags: annotation
 
-- name: Print deployment success message
-  debug:
-    msg: "Annotation service deployed successfully and running on port 5800"
-  tags: annotation
-
-  # MORK Setup
-  
-- name: Clone MORK repository
-  git:
-    repo: https://github.com/DeazStar/MORK.git
-    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/MORK"
-    version: main
-    force: yes
-  tags: mork
-
-- name: Change to MORK directory and make script executable
-  shell: |
-    cd /home/{{ ansible_user_id | default(ansible_user) }}/MORK
-    chmod +x script.sh
-  args:
-    executable: /bin/bash
-  tags: mork
-
-- name: Build Docker image
-  shell: |
-    cd /home/{{ ansible_user_id | default(ansible_user) }}/MORK
-    docker build -t mork_pathmap .
-  args:
-    executable: /bin/bash
-  tags: mork
-
-- name: Clean up existing MORK container
-  shell: |
-    docker stop mork_container || true
-    docker rm mork_container || true
-  args:
-    executable: /bin/bash
+# Check Annotation main service
+- name: Check Annotation service container status
+  docker_container_info:
+    name: annotation_annotation_service_1
+  register: annotation_service
   ignore_errors: yes
-  tags: mork
 
-- name: Run MORK container
-  shell: |
-    docker run -d --name mork_container \
-    -p 8231:8231 \
-    -v /home/root/Custom_Atomspace_builder/output:/shared/output \
-    mork_pathmap
-  args:
-    executable: /bin/bash
-  tags: mork
+# Print dynamic deployment message
+- name: Print Annotation deployment status
+  debug:
+    msg: |
+      {% if annotation_service.container is defined and annotation_service.container.State.Status == "running" %}
+      ✅ Annotation service deployed successfully and running:
+        - annotation_annotation_service_1: http://localhost:5800
+      {% else %}
+      ❌ Deployment incomplete: Annotation service is down.
+        - annotation_annotation_service_1 is DOWN. Start with: docker-compose up -d annotation_annotation_service_1
+      {% endif %}
 
-- name: Verify container is running
-  shell: docker ps -f "name=mork_container" --format "{{ '{{.Names}} {{.Status}}' }}"
-  register: container_status
-  until: "'Up' in container_status.stdout"
-  retries: 5
-  delay: 5
-  tags: mork
+

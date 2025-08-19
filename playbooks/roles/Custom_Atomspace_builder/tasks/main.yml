@@ -74,7 +74,7 @@
 - name: Set configuration variables
   ansible.builtin.set_fact:
     repo_url: "https://github.com/rejuve-bio/custom-atomspace-builder.git"
-    install_dir: "/home/{{ ansible_user_id | default(ansible_user) }}/Custom_Atomspace_builder"
+    install_dir: "/home/{{ ansible_user_id | default(ansible_user) }}/custom-atomspace-builder"
     python_version: "3.8"
 
 # Create installation directory 
@@ -152,6 +152,46 @@
   environment:
     HOME: "{{ install_dir }}"
 
-- name: Print completion message
+# Check HugeGraph container status
+- name: Check HugeGraph container status
+  docker_container_info:
+    name: hugegraph-atomspace
+  register: hugegraph_service
+  ignore_errors: yes
+
+# Check AtomSpace-API container status
+- name: Check AtomSpace-API container status
+  docker_container_info:
+    name: atomspace-api
+  register: atomspace_service
+  ignore_errors: yes
+
+- name: Start AtomSpace-API container if it exists but not running
+  docker_container:
+    name: atomspace-api
+    state: started
+  when:
+    - atomspace_service is defined
+    - atomspace_service.exists | default(false)
+    - atomspace_service.container.State.Running is defined
+    - not atomspace_service.container.State.Running
+  ignore_errors: yes
+
+# Print final deployment status
+- name: Print final deployment status
   debug:
-    msg: "Custom_Atomspace_builder deployment completed! Docker containers are running."
+    msg: |
+      {% if (hugegraph_service.container is defined and hugegraph_service.container.State.Status == "running") and
+            (atomspace_service.container is defined and atomspace_service.container.State.Status == "running") %}
+      ✅ All services are up and running:
+        - HugeGraph (hugegraph-atomspace)
+        - AtomSpace-API (atomspace-api)
+      {% else %}
+      ❌ Deployment incomplete: Some services are down.
+        {% if hugegraph_service.container is not defined or hugegraph_service.container.State.Status != "running" %}
+        - HugeGraph container is DOWN. Start it with: docker-compose up -d hugegraph-atomspace
+        {% endif %}
+        {% if atomspace_service.container is not defined or atomspace_service.container.State.Status != "running" %}
+        - AtomSpace-API container is DOWN. Start it with: docker-compose up -d atomspace-api
+        {% endif %}
+      {% endif %}

@@ -1,0 +1,63 @@
+- name: Check annotation service status
+  docker_container_info:
+    name: annotation_annotation_service_1
+  register: annotation_service
+  ignore_errors: yes
+
+- name: Check atomspace-api status
+  docker_container_info:
+    name: atomspace-api
+  register: atomspace_api
+  ignore_errors: yes
+
+# FAIL if services aren't running
+- name: Validate services
+  fail:
+    msg: |
+      ❌ ERROR: Required services not running:
+      {% if annotation_service.container is not defined or annotation_service.container.State.Status != "running" %}
+      - Annotation service (port 5800) is DOWN. Start it with:
+          docker-compose up -d annotation_service
+      {% endif %}
+      {% if atomspace_api.container is not defined or atomspace_api.container.State.Status != "running" %}
+      - AtomSpace-API (port 8001) is DOWN. Start it with:
+          docker-compose up -d atomspace-api
+      {% endif %}
+      🔄 After starting, re-run this playbook.
+  when: 
+    - (annotation_service.container is not defined) or 
+      (annotation_service.container.State.Status != "running") or
+      (atomspace_api.container is not defined) or 
+      (atomspace_api.container.State.Status != "running")
+
+# Build the network-setup image locally
+- name: Build network-setup Docker image
+  community.docker.docker_image:
+    name: network-setup
+    tag: latest
+    source: build  
+    build:
+      path: "{{ playbook_dir }}/roles/network/files/docker/network-setup"
+      dockerfile: "Dockerfile"  
+    state: present
+
+# Run network-setup container
+- name: Run network-setup container
+  docker_container:
+    name: network-setup
+    image: network-setup:latest
+    state: started
+    restart_policy: no
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: /app/entrypoint.sh
+  register: network_setup
+
+#Confirm network success
+- name: Confirm network success
+  debug:
+    msg:
+      - "AtomSpace-API GET endpoint: http://localhost:8001/docs"
+      - "✅ SUCCESS: Services are now networked!"
+      - "Annotation service POST endpoint: http://annotation_annotation_service_1:5800"
+      - "🔄 Use a POST request to http://annotation_annotation_service_1:5800"
