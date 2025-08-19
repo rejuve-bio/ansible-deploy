@@ -166,6 +166,17 @@
   register: atomspace_service
   ignore_errors: yes
 
+- name: Start AtomSpace-API container if it exists but not running
+  docker_container:
+    name: atomspace-api
+    state: started
+  when:
+    - atomspace_service is defined
+    - atomspace_service.exists | default(false)
+    - atomspace_service.container.State.Running is defined
+    - not atomspace_service.container.State.Running
+  ignore_errors: yes
+
 # Print final deployment status
 - name: Print final deployment status
   debug:
