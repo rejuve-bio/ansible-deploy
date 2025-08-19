@@ -86,7 +86,7 @@
   shell: |
     docker run -d --name mork_container \
     -p 8231:8231 \
-    -v /home/root/Custom_Atomspace_builder/output:/shared/output \
+    -v /home/root/custom-atomspace-builder/output:/shared/output \
     mork_pathmap
   args:
     executable: /bin/bash
