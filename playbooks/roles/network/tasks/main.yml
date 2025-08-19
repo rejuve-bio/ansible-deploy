@@ -30,34 +30,30 @@
       (atomspace_api.container is not defined) or 
       (atomspace_api.container.State.Status != "running")
 
-# CONNECT to network if both are up
-- name: Connect annotation service to rejuve-services-net if not already connected
-  docker_network:
-    name: rejuve-services-net
-    connected: "{{ annotation_service.container.Id }}"
+# Build the network-setup image locally
+- name: Build network-setup Docker image
+  community.docker.docker_image:
+    name: network-setup
+    tag: latest
+    source: build  
+    build:
+      path: "{{ playbook_dir }}/roles/network/files/docker/network-setup"
+      dockerfile: "Dockerfile"  
     state: present
-  when: "'rejuve-services-net' not in annotation_service.container.NetworkSettings.Networks"
-  register: connect_annotation_result
 
-- name: Notify annotation service already connected
-  debug:
-    msg: "ℹ️ Annotation service is already connected to rejuve-services-net"
-  when: "'rejuve-services-net' in annotation_service.container.NetworkSettings.Networks"
+# Run network-setup container
+- name: Run network-setup container
+  docker_container:
+    name: network-setup
+    image: network-setup:latest
+    state: started
+    restart_policy: no
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: /app/entrypoint.sh
+  register: network_setup
 
-- name: Connect atomspace-api to rejuve-services-net if not already connected
-  docker_network:
-    name: rejuve-services-net
-    connected: "{{ atomspace_api.container.Id }}"
-    state: present
-  when: "'rejuve-services-net' not in atomspace_api.container.NetworkSettings.Networks"
-  register: connect_atomspace_result
-
-- name: Notify atomspace-api already connected
-  debug:
-    msg: "ℹ️ AtomSpace-API is already connected to rejuve-services-net"
-  when: "'rejuve-services-net' in atomspace_api.container.NetworkSettings.Networks"
-
-
+#Confirm network success
 - name: Confirm network success
   debug:
     msg:
@@ -65,6 +61,3 @@
       - "✅ SUCCESS: Services are now networked!"
       - "Annotation service POST endpoint: http://annotation_annotation_service_1:5800"
       - "🔄 Use a POST request to http://annotation_annotation_service_1:5800"
-     
-
-
