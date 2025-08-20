@@ -1,13 +1,6 @@
 # Local_Deployment
-## deploy_UI.yml
-- name: Deploy UI Service
-  hosts: UI_Local
-  tags: UI_Local
-  become: true
-  roles:
-    - UI
 
-## deploy_custom_atomspace.yml
+# deploy_custom_atomspace
 - name: Custom Atomspace builder_Local
   hosts: Custom_Atomspace_builder_Local
   tags: Custom_Atomspace_builder_Local
@@ -15,7 +8,7 @@
   roles:
     - Custom_Atomspace_builder
   
-  ## deploy_annotation.yml
+  # deploy_annotation
 - name: Deploy Annotation Service
   hosts: annotation_Local
   tags: annotation_Local
@@ -31,9 +24,17 @@
   roles:
     - MORK
 
+# deploy_UI
+- name: Deploy UI Service
+  hosts: UI_Local
+  tags: UI_Local
+  become: true
+  roles:
+    - UI
+
 #Remote_Deployment
 
-## deploy_UI.yml
+# deploy_UI
 - name: Deploy UI Service
   hosts: UI_Remote
   tags: UI_Remote
