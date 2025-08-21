@@ -151,6 +151,48 @@
   become: no
   environment:
     HOME: "{{ install_dir }}"
+  ignore_errors: yes
+
+# Start HugeGraph container if it exists but not running
+- name: Start HugeGraph container if it exists but not running
+  docker_container:
+    name: hugegraph-atomspace
+    state: started
+  when:
+    - hugegraph_service is defined
+    - hugegraph_service.exists | default(false)
+    - hugegraph_service.container.State.Running is defined
+    - not hugegraph_service.container.State.Running
+  ignore_errors: yes
+
+- name: Start AtomSpace-API container if it exists but not running
+  docker_container:
+    name: atomspace-api
+    state: started
+  when:
+    - atomspace_service is defined
+    - atomspace_service.exists | default(false)
+    - atomspace_service.container.State.Running is defined
+    - not atomspace_service.container.State.Running
+  ignore_errors: yes
+
+# Start Neo4j container if it exists but not running
+- name: Start Neo4j container if it exists but not running
+  docker_container:
+    name: neo4j-atomspace
+    state: started
+  when:
+    - neo4j_service is defined
+    - neo4j_service.exists | default(false)
+    - neo4j_service.container.State.Running is defined
+    - not neo4j_service.container.State.Running
+  ignore_errors: yes
+
+# Wait before checking container status
+- name: Wait for containers to initialize
+  ansible.builtin.wait_for:
+    timeout: 10
+  delegate_to: localhost
 
 # Check HugeGraph container status
 - name: Check HugeGraph container status
@@ -166,15 +208,11 @@
   register: atomspace_service
   ignore_errors: yes
 
-- name: Start AtomSpace-API container if it exists but not running
-  docker_container:
-    name: atomspace-api
-    state: started
-  when:
-    - atomspace_service is defined
-    - atomspace_service.exists | default(false)
-    - atomspace_service.container.State.Running is defined
-    - not atomspace_service.container.State.Running
+# Check Neo4j container status
+- name: Check Neo4j container status
+  docker_container_info:
+    name: neo4j-atomspace
+  register: neo4j_service
   ignore_errors: yes
 
 # Print final deployment status
@@ -182,10 +220,12 @@
   debug:
     msg: |
       {% if (hugegraph_service.container is defined and hugegraph_service.container.State.Status == "running") and
-            (atomspace_service.container is defined and atomspace_service.container.State.Status == "running") %}
+            (atomspace_service.container is defined and atomspace_service.container.State.Status == "running") and
+            (neo4j_service.container is defined and neo4j_service.container.State.Status == "running") %}
       ✅ All services are up and running:
         - HugeGraph (hugegraph-atomspace)
         - AtomSpace-API (atomspace-api)
+        - Neo4j (neo4j-atomspace)
       {% else %}
       ❌ Deployment incomplete: Some services are down.
         {% if hugegraph_service.container is not defined or hugegraph_service.container.State.Status != "running" %}
@@ -194,4 +234,8 @@
         {% if atomspace_service.container is not defined or atomspace_service.container.State.Status != "running" %}
         - AtomSpace-API container is DOWN. Start it with: docker-compose up -d atomspace-api
         {% endif %}
+        {% if neo4j_service.container is not defined or neo4j_service.container.State.Status != "running" %}
+        - Neo4j container is DOWN. Start it with: docker-compose up -d neo4j-atomspace
+        {% endif %}
       {% endif %}
+

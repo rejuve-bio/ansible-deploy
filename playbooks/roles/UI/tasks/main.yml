@@ -1,4 +1,5 @@
-- name: Create UI directory
+---
+- name: Ensure UI directory exists
   ansible.builtin.file:
     path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
     state: directory
@@ -6,16 +7,7 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
 
-- name: Fix ownership of annotation-ui directory 
-  become: yes
-  ansible.builtin.file:
-    path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
-    state: directory
-    recurse: yes
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "{{ ansible_user_id | default(ansible_user) }}"
-
-- name: Clone UI repository 
+- name: Clone UI repository
   ansible.builtin.git:
     repo: "https://github.com/yisehak-awm/annotation-tool.git"
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
@@ -23,7 +15,7 @@
     force: yes
     update: yes
 
-- name: copy .env file 
+- name: Copy .env file for UI
   ansible.builtin.copy:
     src: "templates/UI.env"
     dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/.env"
@@ -32,101 +24,113 @@
     group: "{{ ansible_user_id | default(ansible_user) }}"
     force: yes
 
-- name: Nuke existing node_modules
-  ansible.builtin.file:
-    path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/node_modules"
-    state: absent
-  ignore_errors: yes
-
-- name: Install Node.js and npm
-  ansible.builtin.apt:
-    name:
-      - nodejs
-      - npm
-    state: present
-    update_cache: yes
-
-- name: Install dependencies
-  become: yes
-  become_user: "{{ ansible_user_id | default(ansible_user) }}"
-  ansible.builtin.shell: "npm install"
-  args:
-    chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
-
-- name: Fix ownership of node_modules
-  become: yes
-  ansible.builtin.file:
-    path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/node_modules"
-    state: directory
-    recurse: yes
+- name: Copy docker run script
+  ansible.builtin.copy:
+    src: "files/docker-ui-run.sh"
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/docker-ui-run.sh"
+    mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
+    force: yes
 
-- name: Build application
-  become: yes
-  become_user: "{{ ansible_user_id | default(ansible_user) }}"
-  ansible.builtin.shell: "npm run build"
-  args:
+- name: Ensure docker run script is executable
+  ansible.builtin.command:
+    cmd: "chmod +x /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/docker-ui-run.sh"
+
+- name: Run UI Docker build and container via script
+  ansible.builtin.command:
+    cmd: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/docker-ui-run.sh"
     chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
-    executable: /bin/bash
-  environment:
-    NODE_OPTIONS: "--openssl-legacy-provider"
 
-- name: Start UI application and capture correct URL 
-  become: yes
-  become_user: "{{ ansible_user_id | default(ansible_user) }}"
-  ansible.builtin.shell: |
-    # Start the app and capture the correct URL
-    npm start > /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/ui.log 2>&1 &
-    sleep 15
-    grep -E 'Server running on|Listening on|Application started|http://localhost|https://localhost' /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/ui.log | grep -v npmjs | tail -1 | awk '{print $NF}' > /tmp/app_url.txt
-    if [ ! -s /tmp/app_url.txt ]; then
-      ss -tulnp | grep node | awk '{print $5}' | awk -F: '{print $NF}' | head -1 > /tmp/app_url.txt
-      echo "http://localhost:$(cat /tmp/app_url.txt)" > /tmp/app_url.txt
-    fi
-  args:
-    chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
-    executable: /bin/bash
-  environment:
-    NODE_ENV: production
-
-- name: Read captured URL
-  ansible.builtin.slurp:
-    src: /tmp/app_url.txt
-  register: app_url_file
+- name: Get network interfaces information
+  ansible.builtin.shell:
+    cmd: |
+      ip -o -4 addr show scope global | awk '{print $4}' | cut -d'/' -f1
+  register: network_ips
   changed_when: false
 
-- name: Set application URL
-  ansible.builtin.set_fact:
-    app_url: "{{ app_url_file.content | b64decode | trim | default('http://localhost:3000') }}"
+- name: Filter out common internal/docker IP ranges
+  set_fact:
+    valid_ips: "{{ network_ips.stdout_lines | reject('match', '^127\\.') | reject('match', '^172\\.1[7-9]\\.') | reject('match', '^172\\.2[0-9]\\.') | reject('match', '^172\\.3[0-1]\\.') | reject('match', '^10\\.') | reject('match', '^192\\.168\\.') | reject('match', '^169\\.254\\.') | list }}"
 
-- name: Get all IPv4 addresses
-  ansible.builtin.command: "hostname -I"
-  register: ip_addresses
+- name: Get default gateway IP for the Annotation_UI
+  ansible.builtin.shell:
+    cmd: |
+      ip route get 1.1.1.1 | awk '{print $7}' | head -1
+  register: gateway_ip
+  changed_when: false
 
-- name: Verify UI is running
-  ansible.builtin.wait_for:
-    host: "{{ app_url.split('://')[1].split(':')[0] }}"
-    port: "{{ app_url.split(':')[-1] | regex_replace('/.*', '') | int }}"
-    delay: 10
-    timeout: 60
-    state: started
+- name: Create prioritized list of working URLs
+  set_fact:
+    working_urls: "{{ ['http://localhost:3000'] }}"
 
-- name: Display deployment information
-  ansible.builtin.debug:
-    msg: |
-      ✅ Annotation UI successfully deployed!!
-      Installation directory: /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui
-      Detected Application URL: {{ app_url }}
-      Alternative Access URLs:
-      {% for ip in ip_addresses.stdout.split() %}
-      - http://{{ ip }}:{{ app_url.split(':')[-1] | regex_replace('/.*', '') }}
+- name: Add gateway IP to URLs for the Annotation_UI
+  set_fact:
+    working_urls: "{{ working_urls + ['http://' + gateway_ip.stdout + ':3000'] }}"
+  when: gateway_ip.stdout and gateway_ip.stdout not in valid_ips
+
+- name: Add other valid IPs to URLs
+  set_fact:
+    working_urls: "{{ working_urls + ['http://' + item + ':3000'] }}"
+  loop: "{{ valid_ips }}"
+  when: item != gateway_ip.stdout
+
+- name: Check if Custom Atomspace Builder container is running
+  shell: docker ps --filter "name=atomspace-api" --filter "status=running" -q
+  register: custom_atomspace_status
+  changed_when: false
+
+- name: Check if Annotation container is running
+  shell: docker ps --filter "name=annotation_annotation_service_1" --filter "status=running" -q
+  register: annotation_status
+  changed_when: false
+
+- name: Display deployment confirmation 
+  pause:
+    prompt: |
+      
+      🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉🎊🎉
+      
+      {% if custom_atomspace_status.stdout and annotation_status.stdout %}
+          ✨ CONGRATULATIONS! ✨
+          Your Annotation UI is LIVE and ready to use! 🚀
+          All dependent services are UP and running! ✅
+      {% else %}
+          ⚠️ ATTENTION! ⚠️
+          Some required services are not running:
+          {% if not custom_atomspace_status.stdout %}- Custom Atomspace Builder 🚫{% endif %}
+          {% if not annotation_status.stdout %}- Generic Annotation 🚫{% endif %}
+          
+          Please start them before using the UI!
+      {% endif %}
+      
+      📂 Installed at: /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui
+      
+      🎯 YOUR ANNOTATION PORTAL:
+      ================================================================
+      {% for url in working_urls %}
+      🌟 Option {{ loop.index }}: {{ url }}
       {% endfor %}
-      Log file: /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/ui.log
-      To view live logs: tail -f /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/ui.log
-
-- name: Clean up temporary file
-  ansible.builtin.file:
-    path: /tmp/app_url.txt
-
-    state: absent
+      ================================================================
+      
+      🎮 HOW TO ACCESS:
+      - 🐧 WSL users? -> Use IP addresses above (not localhost!)
+      - 🖥️ Linux/Mac? -> http://localhost:3000 OR IP addresses
+      - 🌍 Remote access? -> Use IP addresses only
+      - 🛡️ Connection issues? -> Check port 3000 in firewall
+      - 📱 Mobile device? -> Any IP address works on mobile too!
+      
+      🔍 NEED TO DEBUG?
+      - 📊 Live logs: tail -f ~/annotation-ui/ui.log
+      - 🐳 Container: docker logs ui  
+      - 🔧 Status: docker ps | grep  ui:latest
+      
+      🎯 START ANNOTATING:
+      ================================================================
+      1. Open your favorite browser 🌐                         
+      2. Copy one of the URLs above 📋                         
+      3. Start your annotation project! ✨                     
+      ================================================================
+      
+      🎉 Press ENTER when you are ready to begin! 🎉
+    seconds: 5
