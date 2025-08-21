@@ -36,6 +36,7 @@
     name: network-setup
     tag: latest
     source: build  
+    force_source: true  
     build:
       path: "{{ playbook_dir }}/roles/network/files/docker/network-setup"
       dockerfile: "Dockerfile"  
