@@ -1,8 +1,3 @@
-# roles/biocypher/tasks/main.yml
-- name: Fix dpkg if interrupted
-  command: sudo dpkg --configure -a
-  ignore_errors: yes
-
 - name: Update apt cache
   apt:
     update_cache: yes
@@ -12,12 +7,65 @@
     name: [python3, python3-pip, git]
     state: present
 
-- name: Clone the Galaxy repository
-  git:
-    repo: <url>
-    dest: /home/RejuveBio/Hypothesis
-    version: main
+- name: Ensure Docker service is running
+  service:
+    name: docker
+    state: started
+    enabled: yes
+  tags: Hypothesis
+  ignore_errors: yes
 
-- name: Print Hello from Hypothesis role
-  debug:
-    msg: "Ansible role 'Hypothesis'working correctly!"
+- name: Add current user to docker group
+  user:
+    name: "{{ ansible_user_id | default(ansible_user) }}"
+    groups: docker
+    append: yes
+  tags: Hypothesis
+
+- name: Create project directory
+  file:
+    path: "/home/{{ ansible_user_id | default(ansible_user) }}/hypothesis-generation"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  tags: Hypothesis
+
+- name: Clone the Hypothesis repository
+  git:
+    repo: https://github.com/rejuve-bio/hypothesis-generation-demo.git
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/hypothesis-generation"
+    version: main
+    force: yes
+  tags: Hypothesis
+
+- name: Copy pre-configured .env file to remote
+  copy:
+    src: templates/.env
+    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/hypothesis-generation/.env"
+    mode: '0640'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  tags: Hypothesis
+
+- name: Clean up existing containers
+  shell: |
+    {{ 'sudo' if ansible_connection != 'local' else '' }} docker-compose -f "/home/{{ ansible_user_id | default(ansible_user) }}/hypothesis-generation/docker-compose.yml" down -v
+  args:
+    executable: /bin/bash
+  ignore_errors: yes
+  register: cleanup
+  changed_when: "'Stopping' in cleanup.stdout"
+  tags: Hypothesis
+
+- name: Build and start containers with live logging
+  shell: |
+    cd "/home/{{ ansible_user_id | default(ansible_user) }}/hypothesis-generation"
+    {{ 'sudo' if ansible_connection != 'local' else '' }} docker-compose up --build 2>&1 | tee /tmp/hypothesis_live.log
+  args:
+    executable: /bin/bash
+  register: compose_up
+  retries: 2
+  delay: 10
+  until: compose_up.rc == 0
+  tags: Hypothesis
