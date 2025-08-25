@@ -25,6 +25,14 @@ An infrastructure automation project for deploying Rejuve Bio’s core services 
 - Passwordless `sudo` access for deployment user  
 
 ---
+# Setup Instructions for an existing machine
+
+If you are working on an existing server or computer (i.e., not a fresh install), make sure to update the package lists first. This should complete without any issues:
+
+```bash
+sudo apt update
+sudo apt upgrade -y
+```
 # Directory Stracture
 ```
 ansible-deploy/
@@ -124,7 +132,7 @@ OPENAI_API_KEY="your_LLM_API_KEY_here"
 
 Execute the playbook with:
 
-#### to deplay only the UI
+#### to deploy only the UI
 
 ```cd /ansible-deploy``` run from the root directory
 
@@ -132,7 +140,7 @@ Execute the playbook with:
 ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass
 ```
 
-#### to deplay only the Custom Atomspace Builder
+#### to deploy only the Custom Atomspace Builder
 
 ```cd /ansible-deploy``` run from the root directory
 
@@ -140,7 +148,7 @@ ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_
 ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass
 ```
 
-#### to deplay only the annotation
+#### to deploy only the annotation
 
 ```cd /ansible-deploy``` run from the root directory
 
@@ -148,7 +156,7 @@ ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Cus
 ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags annotation_Local --ask-become-pass
 ```
 
-#### to deplay with MORK database
+#### to deploy with MORK database
 
 ```cd /ansible-deploy``` run from the root directory
 
@@ -156,7 +164,7 @@ ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags ann
 ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags MORK_Local --ask-become-pass
 ```
 
-#### to deplay all with only Neo4j database
+#### to deploy all with only Neo4j database
 
 ```cd /ansible-deploy``` run from the root directory 
 
@@ -164,7 +172,7 @@ ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags MOR
 ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,local_network --ask-become-pass
 ```
 
-#### to deplay all with MORK database
+#### to deploy all with MORK database
 
 ```cd /ansible-deploy``` run from the root directory 
 
@@ -173,7 +181,7 @@ ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_L
 ```
 Enter your sudo password when prompted.
 
-#### to deplay on Remote server
+#### to deploy on Remote server
 
 ```update  hosts.ini```
 
