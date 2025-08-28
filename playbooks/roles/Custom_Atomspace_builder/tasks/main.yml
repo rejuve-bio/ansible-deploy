@@ -41,20 +41,18 @@
         state: present
         update_cache: yes
       register: docker_install
-      ignore_errors: yes
       become: yes
       ignore_errors: yes
 
     - name: Resolve conflicts for local installation
-      when: docker_install is failed and ansible_connection == 'local'
       block:
         - name: Remove conflicting containerd
           ansible.builtin.apt:
             name: containerd
             state: absent
             purge: yes
-          ignore_errors: yes
           become: yes
+          ignore_errors: yes
 
         - name: Reinstall Docker after cleanup
           ansible.builtin.apt:
@@ -65,6 +63,7 @@
             update_cache: yes
           become: yes
           ignore_errors: yes
+      when: docker_install is failed and ansible_connection == 'local'
 
 - name: Ensure Docker service is running
   ansible.builtin.service:
@@ -148,6 +147,7 @@
     mode: '0775'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "docker"
+  ignore_errors: yes
 
 - name: Fix permissions for .docker recursively
   ansible.builtin.file:
@@ -156,9 +156,10 @@
     group: "docker"
     mode: '0775'
     recurse: yes
+  ignore_errors: yes
 
 # Run make build as the correct user
-- name: Run make build in the repository root
+- name: Run make build 
   ansible.builtin.command: make build
   args:
     chdir: "{{ install_dir }}"

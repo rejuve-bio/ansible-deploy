@@ -1,7 +1,5 @@
 ---
 - name: Ensure UI directory exists
----
-- name: Ensure UI directory exists
   ansible.builtin.file:
     path: "{{ ansible_user_dir }}/services/annotation-ui"
     state: directory
@@ -10,7 +8,6 @@
     group: "{{ ansible_user_id | default(ansible_user) }}"
 
 - name: Clone UI repository
-- name: Clone UI repository
   ansible.builtin.git:
     repo: "https://github.com/yisehak-awm/annotation-tool.git"
     dest: "{{ ansible_user_dir }}/services/annotation-ui"
@@ -18,7 +15,6 @@
     force: yes
     update: yes
 
-- name: Copy .env file for UI
 - name: Copy .env file for UI
   ansible.builtin.copy:
     src: "templates/UI.env"
@@ -54,10 +50,12 @@
       ip -o -4 addr show scope global | awk '{print $4}' | cut -d'/' -f1
   register: network_ips
   changed_when: false
+  ignore_errors: yes
 
 - name: Filter out common internal/docker IP ranges
   set_fact:
     valid_ips: "{{ network_ips.stdout_lines | reject('match', '^127\\.') | reject('match', '^172\\.1[7-9]\\.') | reject('match', '^172\\.2[0-9]\\.') | reject('match', '^172\\.3[0-1]\\.') | reject('match', '^10\\.') | reject('match', '^192\\.168\\.') | reject('match', '^169\\.254\\.') | list }}"
+  ignore_errors: yes
 
 - name: Get default gateway IP for the Annotation_UI
   ansible.builtin.shell:
@@ -65,7 +63,8 @@
       ip route get 1.1.1.1 | awk '{print $7}' | head -1
   register: gateway_ip
   changed_when: false
-
+  ignore_errors: yes
+  
 - name: Create prioritized list of working URLs
   set_fact:
     working_urls: "{{ ['http://localhost:3000'] }}"
