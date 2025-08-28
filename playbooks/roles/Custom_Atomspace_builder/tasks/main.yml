@@ -1,3 +1,4 @@
+---
 - name: Disable CD-ROM repositories
   become: yes
   lineinfile:
@@ -6,6 +7,7 @@
     line: '#\0'
     backrefs: yes
   when: ansible_facts['os_family'] == 'Debian'
+  ignore_errors: yes
 
 - name: Clean up conflicting Docker repository configurations
   become: yes
@@ -39,16 +41,17 @@
         state: present
         update_cache: yes
       register: docker_install
+      become: yes
       ignore_errors: yes
 
     - name: Resolve conflicts for local installation
-      when: docker_install is failed and ansible_connection == 'local'
       block:
         - name: Remove conflicting containerd
           ansible.builtin.apt:
             name: containerd
             state: absent
             purge: yes
+          become: yes
           ignore_errors: yes
 
         - name: Reinstall Docker after cleanup
@@ -58,23 +61,30 @@
               - docker-compose
             state: present
             update_cache: yes
+          become: yes
+          ignore_errors: yes
+      when: docker_install is failed and ansible_connection == 'local'
 
 - name: Ensure Docker service is running
   ansible.builtin.service:
     name: docker
     state: started
     enabled: yes
+  become: yes
+  ignore_errors: yes
 
 - name: Add current user to docker group
   ansible.builtin.user:
     name: "{{ ansible_user_id | default(ansible_user) }}"
     groups: docker
     append: yes
+  become: yes
+  ignore_errors: yes
 
 - name: Set configuration variables
   ansible.builtin.set_fact:
     repo_url: "https://github.com/rejuve-bio/custom-atomspace-builder.git"
-    install_dir: "/home/{{ ansible_user_id | default(ansible_user) }}/custom-atomspace-builder"
+    install_dir: "{{ ansible_user_dir }}/services/custom-atomspace-builder"
     python_version: "3.8"
 
 # Create installation directory 
@@ -86,6 +96,7 @@
     group: "{{ ansible_user_id | default(ansible_user) }}"
     mode: '0775'
     recurse: yes
+  ignore_errors: yes
 
 - name: Clone repository 
   ansible.builtin.git:
@@ -104,12 +115,14 @@
     group: "{{ ansible_user_id | default(ansible_user) }}"
     mode: '0775'
     recurse: yes
+  ignore_errors: yes
 
 - name: Create output directory
   ansible.builtin.file:
     path: "{{ install_dir }}/output/shared:output/"
     state: directory
     mode: '0775'
+  ignore_errors: yes
 
 - name: Configure config.yaml from template
   ansible.builtin.template:
@@ -134,6 +147,7 @@
     mode: '0775'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "docker"
+  ignore_errors: yes
 
 - name: Fix permissions for .docker recursively
   ansible.builtin.file:
@@ -142,9 +156,10 @@
     group: "docker"
     mode: '0775'
     recurse: yes
+  ignore_errors: yes
 
 # Run make build as the correct user
-- name: Run make build in the repository root
+- name: Run make build 
   ansible.builtin.command: make build
   args:
     chdir: "{{ install_dir }}"
@@ -155,7 +170,7 @@
 
 # Start HugeGraph container if it exists but not running
 - name: Start HugeGraph container if it exists but not running
-  docker_container:
+  community.docker.docker_container:
     name: hugegraph-atomspace
     state: started
   when:
@@ -166,7 +181,7 @@
   ignore_errors: yes
 
 - name: Start AtomSpace-API container if it exists but not running
-  docker_container:
+  community.docker.docker_container:
     name: atomspace-api
     state: started
   when:
@@ -178,7 +193,7 @@
 
 # Start Neo4j container if it exists but not running
 - name: Start Neo4j container if it exists but not running
-  docker_container:
+  community.docker.docker_container:
     name: neo4j-atomspace
     state: started
   when:
@@ -187,7 +202,7 @@
     - neo4j_service.container.State.Running is defined
     - not neo4j_service.container.State.Running
   ignore_errors: yes
-
+  
 # Wait before checking container status
 - name: Wait for containers to initialize
   ansible.builtin.wait_for:
@@ -196,21 +211,21 @@
 
 # Check HugeGraph container status
 - name: Check HugeGraph container status
-  docker_container_info:
+  community.docker.docker_container_info:
     name: hugegraph-atomspace
   register: hugegraph_service
   ignore_errors: yes
 
 # Check AtomSpace-API container status
 - name: Check AtomSpace-API container status
-  docker_container_info:
+  community.docker.docker_container_info:
     name: atomspace-api
   register: atomspace_service
   ignore_errors: yes
 
 # Check Neo4j container status
 - name: Check Neo4j container status
-  docker_container_info:
+  community.docker.docker_container_info:
     name: neo4j-atomspace
   register: neo4j_service
   ignore_errors: yes
@@ -238,4 +253,3 @@
         - Neo4j container is DOWN. Start it with: docker-compose up -d neo4j-atomspace
         {% endif %}
       {% endif %}
-

@@ -1,11 +1,13 @@
 - name: Fix dpkg if interrupted
-  command: "{{ 'sudo' if ansible_connection != 'local' else '' }} dpkg --configure -a"
+  command: dpkg --configure -a
   ignore_errors: yes
   tags: annotation
+  become: yes
 
 - name: Update apt cache
   apt:
     update_cache: yes
+  become: yes
   tags: annotation
 
 - name: Gather installed packages facts
@@ -13,7 +15,7 @@
     manager: auto
   tags: annotation
 
-- name: Install required system packages (skip docker.io if containerd package exists)
+- name: Install required system packages  
   become: yes
   apt:
     name: >
@@ -41,7 +43,7 @@
 
 - name: Create project directory
   file:
-    path: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation"
+    path: "{{ ansible_user_dir }}/services/Annotation"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
@@ -51,14 +53,14 @@
 - name: Clone the Annotation repository
   git:
     repo: https://github.com/rejuve-bio/annotation-query-backend-general.git
-    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation"
+    dest: "{{ ansible_user_dir }}/services/Annotation"
     version: feature/mork-support
     force: yes
   tags: annotation
 
 - name: Modify requirements.txt
   replace:
-    path: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/requirements.txt"
+    path: "{{ ansible_user_dir }}/services/Annotation/requirements.txt"
     regexp: '^biocypher>=0\.5\.4$'
     replace: 'biocypher==0.5.4\npandas>=1.3.0'
     backup: yes
@@ -72,14 +74,23 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
   with_items:
-    - "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/metta_data"
-    - "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/cypher_data"
+    - "{{ ansible_user_dir }}/services/Annotation/metta_data"
+    - "{{ ansible_user_dir }}/services/Annotation/cypher_data"
   tags: annotation
 
 - name: Copy pre-configured .env file to remote
   copy:
-    src: templates/.env
-    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/.env"
+    src: templates/env.j2
+    dest: "{{ ansible_user_dir }}/services/Annotation/.env"
+    mode: '0640'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  tags: annotation
+
+- name: Copy pre-configured docker-compose file to remote
+  template:
+    src: templates/docker-compose.yml.j2
+    dest: "{{ ansible_user_dir }}/services/Annotation/docker-compose.yml"
     mode: '0640'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
@@ -87,7 +98,7 @@
 
 - name: Clean up existing containers
   shell: |
-    {{ 'sudo' if ansible_connection != 'local' else '' }} docker-compose -f "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation/docker-compose.yml" down -v
+    docker-compose -f "{{ ansible_user_dir }}/services/Annotation/docker-compose.yml" down -v
   args:
     executable: /bin/bash
   ignore_errors: yes
@@ -97,8 +108,8 @@
 
 - name: Build and start containers
   shell: |
-    cd "/home/{{ ansible_user_id | default(ansible_user) }}/Annotation"
-    {{ 'sudo' if ansible_connection != 'local' else '' }} docker-compose up --build -d
+    cd "{{ ansible_user_dir }}/services/Annotation"
+    docker-compose up --build -d
   args:
     executable: /bin/bash
   register: compose_up
@@ -109,7 +120,7 @@
 
 - name: Verify container status
   shell: |
-    {{ 'sudo' if ansible_connection != 'local' else '' }} docker ps --filter "name=annotation_service" --format "{{ '{{.Names}} {{.Status}}' }}"
+    docker ps --filter "name=annotation_service" --format "{{ '{{.Names}} {{.Status}}' }}"
   register: container_status
   until: "'Up' in container_status.stdout"
   retries: 5
@@ -119,7 +130,7 @@
 
 - name: Get container logs if verification fails
   shell: |
-    {{ 'sudo' if ansible_connection != 'local' else '' }} docker logs annotation_annotation_service_1 --tail 50
+    docker logs annotation_annotation_service_1 --tail 50
   register: container_logs
   when: container_status.failed
   changed_when: false
@@ -131,14 +142,12 @@
   when: container_status.failed
   tags: annotation
 
-# Check Annotation main service
 - name: Check Annotation service container status
   docker_container_info:
     name: annotation_annotation_service_1
   register: annotation_service
   ignore_errors: yes
 
-# Print dynamic deployment message
 - name: Print Annotation deployment status
   debug:
     msg: |
@@ -149,5 +158,3 @@
       ❌ Deployment incomplete: Annotation service is down.
         - annotation_annotation_service_1 is DOWN. Start with: docker-compose up -d annotation_annotation_service_1
       {% endif %}
-
-

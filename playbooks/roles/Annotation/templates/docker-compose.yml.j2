@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  annotation_service:
+    image: "${DOCKER_HUB_REPO}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ".:/app"
+      - "{{ ansible_user_dir }}/services/Annotation/cypher_data:/app/cypher_data:rw"
+      - "{{ ansible_user_dir }}/services/Annotation/metta_data:/app/metta_data:rw"
+      - "{{ ansible_user_dir }}/services/custom-atomspace-builder/output:/shared/output:rw"
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    container_name: annotation_annotation_service_1
+    command: python run.py
+    restart: always
+    depends_on:
+      - mongodb
+      - redis
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - APP_PORT=${APP_PORT}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+  mongodb:
+    image: mongo:latest
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "${MONGODB_DOCKER_PORT}:27017"
+    restart: always
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6390:6379"
+    restart: always
+    volumes:
+      - redis_data:/data
+
+  caddy:
+    image: caddy:latest
+    ports:
+      - "${CADDY_PORT}:${CADDY_PORT_FORWARD}"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    command: caddy reverse-proxy --from http://0.0.0.0:${CADDY_PORT} --to http://annotation_service:${APP_PORT}
+    restart: always
+    depends_on:
+      - annotation_service
+
+volumes:
+  mongo_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

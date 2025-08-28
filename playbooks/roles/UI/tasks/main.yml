@@ -1,7 +1,7 @@
 ---
 - name: Ensure UI directory exists
   ansible.builtin.file:
-    path: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+    path: "{{ ansible_user_dir }}/services/annotation-ui"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
@@ -10,7 +10,7 @@
 - name: Clone UI repository
   ansible.builtin.git:
     repo: "https://github.com/yisehak-awm/annotation-tool.git"
-    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+    dest: "{{ ansible_user_dir }}/services/annotation-ui"
     version: writer
     force: yes
     update: yes
@@ -18,7 +18,7 @@
 - name: Copy .env file for UI
   ansible.builtin.copy:
     src: "templates/UI.env"
-    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/.env"
+    dest: "{{ ansible_user_dir }}/services/annotation-ui/.env"
     mode: '0644'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
@@ -27,21 +27,67 @@
 - name: Copy docker run script
   ansible.builtin.copy:
     src: "files/docker-ui-run.sh"
-    dest: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/docker-ui-run.sh"
+    dest: "{{ ansible_user_dir }}/services/annotation-ui/docker-ui-run.sh"
     mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
     force: yes
 
 - name: Ensure docker run script is executable
-  ansible.builtin.command:
-    cmd: "chmod +x /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/docker-ui-run.sh"
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/services/annotation-ui/docker-ui-run.sh"
+    mode: '0755'
+    state: file
 
 - name: Run UI Docker build and container via script
   ansible.builtin.command:
-    cmd: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui/docker-ui-run.sh"
-    chdir: "/home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui"
+    cmd: "{{ ansible_user_dir }}/services/annotation-ui/docker-ui-run.sh"
+    chdir: "{{ ansible_user_dir }}/services/annotation-ui"
 
+- name: Get network interfaces information
+  ansible.builtin.shell:
+    cmd: |
+      ip -o -4 addr show scope global | awk '{print $4}' | cut -d'/' -f1
+  register: network_ips
+  changed_when: false
+  ignore_errors: yes
+
+- name: Filter out common internal/docker IP ranges
+  set_fact:
+    valid_ips: "{{ network_ips.stdout_lines | reject('match', '^127\\.') | reject('match', '^172\\.1[7-9]\\.') | reject('match', '^172\\.2[0-9]\\.') | reject('match', '^172\\.3[0-1]\\.') | reject('match', '^10\\.') | reject('match', '^192\\.168\\.') | reject('match', '^169\\.254\\.') | list }}"
+  ignore_errors: yes
+
+- name: Get default gateway IP for the Annotation_UI
+  ansible.builtin.shell:
+    cmd: |
+      ip route get 1.1.1.1 | awk '{print $7}' | head -1
+  register: gateway_ip
+  changed_when: false
+  ignore_errors: yes
+  
+- name: Create prioritized list of working URLs
+  set_fact:
+    working_urls: "{{ ['http://localhost:3000'] }}"
+
+- name: Add gateway IP to URLs for the Annotation_UI
+  set_fact:
+    working_urls: "{{ working_urls + ['http://' + gateway_ip.stdout + ':3000'] }}"
+  when: gateway_ip.stdout and gateway_ip.stdout not in valid_ips
+
+- name: Add other valid IPs to URLs
+  set_fact:
+    working_urls: "{{ working_urls + ['http://' + item + ':3000'] }}"
+  loop: "{{ valid_ips }}"
+  when: item != gateway_ip.stdout
+
+- name: Check if Custom Atomspace Builder container is running
+  shell: docker ps --filter "name=atomspace-api" --filter "status=running" -q
+  register: custom_atomspace_status
+  changed_when: false
+
+- name: Check if Annotation container is running
+  shell: docker ps --filter "name=annotation_annotation_service_1" --filter "status=running" -q
+  register: annotation_status
 - name: Get network interfaces information
   ansible.builtin.shell:
     cmd: |
@@ -104,7 +150,7 @@
           Please start them before using the UI!
       {% endif %}
       
-      📂 Installed at: /home/{{ ansible_user_id | default(ansible_user) }}/annotation-ui
+      📂 Installed at: {{ ansible_user_dir }}/services/annotation-ui
       
       🎯 YOUR ANNOTATION PORTAL:
       ================================================================
@@ -121,7 +167,7 @@
       - 📱 Mobile device? -> Any IP address works on mobile too!
       
       🔍 NEED TO DEBUG?
-      - 📊 Live logs: tail -f ~/annotation-ui/ui.log
+      - 📊 Live logs: tail -f {{ ansible_user_dir }}/annotation-ui/ui.log
       - 🐳 Container: docker logs ui  
       - 🔧 Status: docker ps | grep  ui:latest
       
