@@ -163,7 +163,7 @@
   ansible.builtin.command: make build
   args:
     chdir: "{{ install_dir }}"
-  become: no
+  become: yes
   environment:
     HOME: "{{ install_dir }}"
   ignore_errors: yes
