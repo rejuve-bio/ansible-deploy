@@ -1,102 +1,31 @@
 ---
-- name: Disable CD-ROM repositories
-  become: yes
-  lineinfile:
-    path: /etc/apt/sources.list
-    regexp: '^deb cdrom:'
-    line: '#\0'
-    backrefs: yes
-  when: ansible_facts['os_family'] == 'Debian'
-  ignore_errors: yes
+#custom-atomspace-builder
 
-- name: Clean up conflicting Docker repository configurations
-  become: yes
-  ansible.builtin.file:
-    path: "/etc/apt/sources.list.d/docker.list"
-    state: absent
-  ignore_errors: yes
-
-- name: Clean up additional Docker repository files
-  become: yes
-  ansible.builtin.file:
-    path: "/etc/apt/sources.list.d/docker.list.save"
-    state: absent
-  ignore_errors: yes
-
-- name: Update apt cache 
-  become: yes
-  ansible.builtin.command: apt-get update --fix-missing
-  register: apt_update
-  failed_when: apt_update.rc != 0 and 'could not be read' not in apt_update.stderr
-  changed_when: "'Reading package lists...' in apt_update.stdout"
-  ignore_errors: yes
-
-- name: Install Docker
-  block:
-    - name: Attempt standard Docker installation
-      ansible.builtin.apt:
-        name: 
-          - docker.io
-          - docker-compose
-        state: present
-        update_cache: yes
-      register: docker_install
-      become: yes
-      ignore_errors: yes
-
-    - name: Resolve conflicts for local installation
-      block:
-        - name: Remove conflicting containerd
-          ansible.builtin.apt:
-            name: containerd
-            state: absent
-            purge: yes
-          become: yes
-          ignore_errors: yes
-
-        - name: Reinstall Docker after cleanup
-          ansible.builtin.apt:
-            name: 
-              - docker.io
-              - docker-compose
-            state: present
-            update_cache: yes
-          become: yes
-          ignore_errors: yes
-      when: docker_install is failed and ansible_connection == 'local'
-
-- name: Ensure Docker service is running
-  ansible.builtin.service:
-    name: docker
-    state: started
-    enabled: yes
-  become: yes
-  ignore_errors: yes
-
-- name: Add current user to docker group
-  ansible.builtin.user:
-    name: "{{ ansible_user_id | default(ansible_user) }}"
-    groups: docker
-    append: yes
-  become: yes
-  ignore_errors: yes
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no
 
 - name: Set configuration variables
   ansible.builtin.set_fact:
     repo_url: "https://github.com/rejuve-bio/custom-atomspace-builder.git"
-    install_dir: "{{ ansible_user_dir }}/services/custom-atomspace-builder"
+    install_dir: "{{ ansible_env.HOME }}/services/custom-atomspace-builder"
     python_version: "3.8"
+  become: no
 
 # Create installation directory 
 - name: Ensure installation directory exists
   ansible.builtin.file:
     path: "{{ install_dir }}"
     state: directory
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "{{ ansible_user_id | default(ansible_user) }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: '0775'
     recurse: yes
   ignore_errors: yes
+  become: no
 
 - name: Clone repository 
   ansible.builtin.git:
@@ -106,16 +35,17 @@
     clone: yes
     update: yes
     force: yes
+  become: no
 
 # Set recursive permissions for the entire directory
 - name: Set correct permissions for installation directory
   ansible.builtin.file:
     path: "{{ install_dir }}"
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "{{ ansible_user_id | default(ansible_user) }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: '0775'
-    recurse: yes
   ignore_errors: yes
+  become: no
 
 - name: Create output directory
   ansible.builtin.file:
@@ -123,12 +53,14 @@
     state: directory
     mode: '0775'
   ignore_errors: yes
+  become: no
 
 - name: Configure config.yaml from template
   ansible.builtin.template:
     src: templates/config.yaml.j2
     dest: "{{ install_dir }}/config.yaml"
     mode: '0664'
+  become: no
 
 # Create .env file with proper permissions
 - name: Configure .env file from template
@@ -136,37 +68,57 @@
     src: templates/custom-atomspace-builder.env
     dest: "{{ install_dir }}/.env"
     mode: '0664'
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "docker"
+    owner: "{{ ansible_user_id }}"
+  become: no
 
-# Explicitly create .docker directory with correct permissions
-- name: Ensure .docker directory exists
-  ansible.builtin.file:
-    path: "{{ install_dir }}/.docker"
-    state: directory
-    mode: '0775'
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "docker"
+- name: Run uv setup 
+  command: uv run setup.py
+  args:
+    chdir: "{{ playbook_dir }}"
+  become: no
+
+# Docker Compose command detection
+- name: Check for available Docker Compose command
+  block:
+    - name: Check if docker compose v2 is available
+      command: docker compose version
+      register: docker_compose_v2_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Check if docker-compose v1 is available
+      command: which docker-compose
+      register: docker_compose_v1_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Set compose command fact
+      set_fact:
+        docker_compose_command: "{{ 'docker compose' if docker_compose_v2_check.rc == 0 else 'docker-compose' if docker_compose_v1_check.rc == 0 else '' }}"
+      become: no
+
+    - name: Fail if no Docker Compose found
+      fail:
+        msg: "No Docker Compose command found. Please install either docker-compose v1 or docker compose v2."
+      when: docker_compose_command == ''
+      become: no
+
+- name: Clean up existing containers
+  shell: |
+    sg docker -c "{{ docker_compose_command }} -f {{ install_dir }}/docker-compose.yml down -v"
+  args:
+    executable: /bin/bash
   ignore_errors: yes
+  become: no
 
-- name: Fix permissions for .docker recursively
-  ansible.builtin.file:
-    path: "{{ install_dir }}/.docker"
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "docker"
-    mode: '0775'
-    recurse: yes
-  ignore_errors: yes
-
-# Run make build as the correct user
-- name: Run make build 
+# Run make build as the correct user 
+- name: Run make build
   ansible.builtin.command: make build
   args:
     chdir: "{{ install_dir }}"
-  become: yes
-  environment:
-    HOME: "{{ install_dir }}"
-  ignore_errors: yes
+  become: no
 
 # Start HugeGraph container if it exists but not running
 - name: Start HugeGraph container if it exists but not running
@@ -179,7 +131,9 @@
     - hugegraph_service.container.State.Running is defined
     - not hugegraph_service.container.State.Running
   ignore_errors: yes
+  become: no
 
+# Start AtomSpace-API container if it exists but not running
 - name: Start AtomSpace-API container if it exists but not running
   community.docker.docker_container:
     name: atomspace-api
@@ -190,6 +144,7 @@
     - atomspace_service.container.State.Running is defined
     - not atomspace_service.container.State.Running
   ignore_errors: yes
+  become: no
 
 # Start Neo4j container if it exists but not running
 - name: Start Neo4j container if it exists but not running
@@ -202,12 +157,15 @@
     - neo4j_service.container.State.Running is defined
     - not neo4j_service.container.State.Running
   ignore_errors: yes
+  become: no
   
 # Wait before checking container status
 - name: Wait for containers to initialize
   ansible.builtin.wait_for:
     timeout: 10
   delegate_to: localhost
+  become: no
+  ignore_errors: yes
 
 # Check HugeGraph container status
 - name: Check HugeGraph container status
@@ -215,6 +173,7 @@
     name: hugegraph-atomspace
   register: hugegraph_service
   ignore_errors: yes
+  become: no
 
 # Check AtomSpace-API container status
 - name: Check AtomSpace-API container status
@@ -222,6 +181,7 @@
     name: atomspace-api
   register: atomspace_service
   ignore_errors: yes
+  become: no
 
 # Check Neo4j container status
 - name: Check Neo4j container status
@@ -229,6 +189,7 @@
     name: neo4j-atomspace
   register: neo4j_service
   ignore_errors: yes
+  become: no
 
 # Print final deployment status
 - name: Print final deployment status
@@ -244,12 +205,13 @@
       {% else %}
       ❌ Deployment incomplete: Some services are down.
         {% if hugegraph_service.container is not defined or hugegraph_service.container.State.Status != "running" %}
-        - HugeGraph container is DOWN. Start it with: docker-compose up -d hugegraph-atomspace
+        - HugeGraph container is DOWN. Start it with: {{ docker_compose_command }} up -d hugegraph-atomspace
         {% endif %}
         {% if atomspace_service.container is not defined or atomspace_service.container.State.Status != "running" %}
-        - AtomSpace-API container is DOWN. Start it with: docker-compose up -d atomspace-api
+        - AtomSpace-API container is DOWN. Start it with: {{ docker_compose_command }} up -d atomspace-api
         {% endif %}
         {% if neo4j_service.container is not defined or neo4j_service.container.State.Status != "running" %}
-        - Neo4j container is DOWN. Start it with: docker-compose up -d neo4j-atomspace
+        - Neo4j container is DOWN. Start it with: {{ docker_compose_command }} up -d neo4j-atomspace
         {% endif %}
       {% endif %}
+  become: no
