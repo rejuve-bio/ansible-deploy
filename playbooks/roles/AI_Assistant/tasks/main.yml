@@ -1,82 +1,139 @@
 ---
-- name: Fix dpkg if interrupted
-  command: sudo dpkg --configure -a
-  ignore_errors: yes
+# AI-Assistant Service
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no
 
-- name: Update apt cache
-  apt:
-    update_cache: yes
+- name: Gather installed packages facts
+  ansible.builtin.package_facts:
+    manager: auto
+  become: no
 
-- name: Install required system packages
-  apt:
-    name: [python3, python3-pip, git, docker.io, docker-compose]
-    state: present
-
-- name: Add current user to docker group
-  user:
-    name: "{{ ansible_user }}"
-    groups: docker
-    append: yes
-
-- name: Start and enable Docker service
-  service:
-    name: docker
-    state: started
-    enabled: yes
+- name: Create project directory
+  file:
+    path: "{{ ansible_env.HOME }}/services/AI-Assistant"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  become: no
 
 - name: Clone the AI_Assistant repository
   git:
     repo: https://github.com/rejuve-bio/AI-Assistant.git
-    dest: /home/RejuveBio/ai-assistant
+    dest: "{{ ansible_env.HOME }}/services/AI-Assistant"
     version: main
+    force: yes
+  become: no
 
-- name: Create directory for AI Assistant
-  file:
-    path: /home/RejuveBio/ai-assistant
-    state: directory
-    mode: '0755'
+- name: Copy pre-configured .env file to remote
+  copy:
+    src: templates/ai-assistant.env
+    dest: "{{ ansible_env.HOME }}/services/AI-Assistant/.env"
+    mode: '0640'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  become: no
 
-- name: Copy .env file to remote
-  ansible.builtin.copy:
-    src: templates/.env
-    dest: /home/RejuveBio/ai-assistant/.env
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0644'
-
-- name: Build and start Docker containers
-  command: docker-compose up --build 
+- name: Run uv setup 
+  command: uv run setup.py
   args:
-    chdir: /home/RejuveBio/ai-assistant
-  async: 45
-  poll: 0
+    chdir: "{{ playbook_dir }}"
+  become: no
 
-- name: Check if containers are running
-  command: docker-compose ps
+# Docker Compose command detection
+- name: Check for available Docker Compose command
+  block:
+    - name: Check if docker compose v2 is available
+      command: docker compose version
+      register: docker_compose_v2_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Check if docker-compose v1 is available
+      command: which docker-compose
+      register: docker_compose_v1_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Set compose command fact
+      set_fact:
+        docker_compose_command: "{{ 'docker compose' if docker_compose_v2_check.rc == 0 else 'docker-compose' if docker_compose_v1_check.rc == 0 else '' }}"
+      become: no
+
+    - name: Fail if no Docker Compose found
+      fail:
+        msg: "No Docker Compose command found. Please install either docker-compose v1 or docker compose v2."
+      when: docker_compose_command == ''
+      become: no
+
+- name: Clean up existing containers
+  shell: |
+    sg docker -c "{{ docker_compose_command }} -f {{ ansible_env.HOME }}/services/AI-Assistant/docker-compose.yml down -v"
   args:
-    chdir: /home/RejuveBio/ai-assistant
-  register: container_status
-  changed_when: false
-
-- name: Show container status
-  debug:
-    var: container_status.stdout_lines
-
-- name: Check Docker logs for errors
-  command: docker-compose logs
-  args:
-    chdir: /home/RejuveBio/ai-assistant
-  register: docker_logs
+    executable: /bin/bash
   ignore_errors: yes
+  register: cleanup
+  changed_when: "'Stopping' in cleanup.stdout"
+  become: no
 
-- name: Show last 20 lines of logs
-  debug:
-    var: docker_logs.stdout_lines[-20:]
+- name: Build and start containers
+  shell: |
+    sg docker -c "cd {{ ansible_env.HOME }}/services/AI-Assistant && {{ docker_compose_command }} up --build -d"
+  args:
+    executable: /bin/bash
+  register: compose_up
+  retries: 2
+  delay: 10
+  until: compose_up.rc == 0
+  become: no
 
-- name: Print container status
-  debug:
-    var: docker_ps.stdout_lines
+- name: Check AI Assistant main service container status
+  docker_container_info:
+    name: ai-assistant-assistant-1
+  register: ai_assistant_service
+  ignore_errors: yes
+  become: no
 
-- name: Print completion message
+- name: Check Qdrant container status
+  docker_container_info:
+    name: ai-assistant-qdrant-1
+  register: qdrant_service
+  ignore_errors: yes
+  become: no
+
+- name: Check Redis container status
+  docker_container_info:
+    name: ai-assistant-redis-1
+  register: redis_service
+  ignore_errors: yes
+  become: no
+
+- name: Print AI Assistant deployment status
   debug:
-    msg: "AI Assistant deployment completed! Docker containers are running."
+    msg: |
+      {% if ai_assistant_service.container is defined and ai_assistant_service.container.State.Status == "running" and
+            qdrant_service.container is defined and qdrant_service.container.State.Status == "running" and
+            redis_service.container is defined and redis_service.container.State.Status == "running" %}
+      ✅ AI Assistant service deployed successfully and running:
+        - ai-assistant-assistant-1: http://localhost:5002
+        - ai-assistant-qdrant-1: http://localhost:6333 (Dashboard), http://localhost:6334 (API)
+        - ai-assistant-redis-1: redis://localhost:6378
+      {% else %}
+      ❌ Deployment incomplete: Some AI Assistant services are down.
+        {% if ai_assistant_service.container is not defined or ai_assistant_service.container.State.Status != "running" %}
+        - ai-assistant-assistant-1 is DOWN. Start with: {{ docker_compose_command }} up -d ai-assistant-assistant-1
+        {% endif %}
+        {% if qdrant_service.container is not defined or qdrant_service.container.State.Status != "running" %}
+        - ai-assistant-qdrant-1 is DOWN. Start with: {{ docker_compose_command }} up -d ai-assistant-qdrant-1
+        {% endif %}
+        {% if redis_service.container is not defined or redis_service.container.State.Status != "running" %}
+        - ai-assistant-redis-1 is DOWN. Start with: {{ docker_compose_command }} up -d ai-assistant-redis-1
+        {% endif %}
+      {% endif %}
+  become: no

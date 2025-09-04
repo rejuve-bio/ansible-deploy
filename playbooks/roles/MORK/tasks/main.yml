@@ -1,134 +1,142 @@
 # MORK Setup
-- name: Fix dpkg if interrupted
-  command: dpkg --configure -a
-  ignore_errors: yes
-  tags: MORK
-  become: yes
-
-- name: Update apt cache
-  apt:
-    update_cache: yes
-  become: yes
-  tags: MORK
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no 
 
 - name: Gather installed packages facts
   ansible.builtin.package_facts:
     manager: auto
-  tags: MORK
-
-- name: Install required system packages  
-  become: yes
-  apt:
-    name: >
-      {{
-        ['docker-compose', 'python3', 'python3-pip', 'git']
-        + ([] if (ansible_facts.packages.keys() | select('search', 'containerd') | list | length > 0) else ['docker.io'])
-      }}
-    state: present
-    update_cache: yes
-  tags: MORK
-
-- name: Ensure Docker service is running
-  service:
-    name: docker
-    state: started
-    enabled: yes
-  tags: MORK
-
-- name: Add current user to docker group
-  user:
-    name: "{{ ansible_user_id | default(ansible_user) }}"
-    groups: docker
-    append: yes
-  tags: MORK
+  become: no
 
 - name: Create project directory
   file:
-    path: "{{ ansible_user_dir }}/services/MORK"
+    path: "{{ ansible_env.HOME }}/services/MORK"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
-  tags: MORK
-
+  become: no
+  
 - name: Clone MORK repository
   git:
     repo: https://github.com/DeazStar/MORK.git
-    dest: "{{ ansible_user_dir }}/services/MORK"
+    dest: "{{ ansible_env.HOME }}/services/MORK"
     version: main
     force: yes
-  tags: MORK
+  become: no
+
+- name: Run uv setup 
+  command: uv run setup.py
+  args:
+    chdir: "{{ playbook_dir }}"
+  become: no
 
 - name: Make script executable
   file:
-    path: "{{ ansible_user_dir }}/services/MORK/script.sh"
+    path: "{{ ansible_env.HOME }}/services/MORK/script.sh"
     mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
-  tags: MORK
+  become: no
+
+# Docker Compose command detection 
+- name: Check for available Docker Compose command
+  block:
+    - name: Check if docker compose v2 is available
+      command: docker compose version
+      register: docker_compose_v2_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Check if docker-compose v1 is available
+      command: which docker-compose
+      register: docker_compose_v1_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Set compose command fact
+      set_fact:
+        docker_compose_command: "{{ 'docker compose' if docker_compose_v2_check.rc == 0 else 'docker-compose' if docker_compose_v1_check.rc == 0 else '' }}"
+      become: no
+
+    - name: Fail if no Docker Compose found
+      fail:
+        msg: "No Docker Compose command found. Please install either docker-compose v1 or docker compose v2."
+      when: docker_compose_command == ''
+      become: no
 
 - name: Build Docker image
   shell: |
-    cd "{{ ansible_user_dir }}/services/MORK"
-    docker build -t mork_pathmap .
+    sg docker -c "cd {{ ansible_env.HOME }}/services/MORK && docker build -t mork_pathmap ."
   args:
     executable: /bin/bash
-  tags: MORK
+  become: no
 
 - name: Create data directory for MORK
   file:
-    path: "{{ ansible_user_dir }}/services/MORK/data"
+    path: "{{ ansible_env.HOME }}/services/MORK/data"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
-  tags: MORK
+  become: no
 
 - name: Clean up existing MORK container
   shell: |
-    docker stop mork_container || true
-    docker rm mork_container || true
+    sg docker -c "docker stop mork_container || true && docker rm mork_container || true"
   args:
     executable: /bin/bash
   ignore_errors: yes
-  tags: MORK
+  become: no
 
 - name: Run MORK container
   shell: |
-    docker run -d --name mork_container \
+    sg docker -c "docker run -d --name mork_container \
     -p 8231:8231 \
-    -v "{{ ansible_user_dir }}/services/MORK/data:/shared/output" \
-    mork_pathmap
+    -v \"{{ ansible_env.HOME }}/services/MORK/data:/shared/output\" \
+    mork_pathmap"
   args:
     executable: /bin/bash
-  tags: MORK
+  become: no
+  ignore_errors: yes
 
 - name: Verify container is running
-  shell: docker ps -f "name=mork_container" --format "{{ '{{.Names}} {{.Status}}' }}"
+  shell: |
+    sg docker -c "docker ps -f \"name=mork_container\" --format \"{{ '{{.Names}} {{.Status}}' }}\""
   register: container_status
   until: "'Up' in container_status.stdout"
   retries: 5
   delay: 5
-  tags: MORK
+  become: no
+  ignore_errors: yes
 
 - name: Get container logs if verification fails
   shell: |
-    docker logs mork_container --tail 50
+    sg docker -c "docker logs mork_container --tail 50"
   register: container_logs
   when: container_status.failed
   changed_when: false
-  tags: MORK
+  become: no
+  ignore_errors: yes
 
 - name: Display container logs if deployment failed
   debug:
     var: container_logs.stdout_lines
   when: container_status.failed
-  tags: MORK
+  become: no
+  ignore_errors: yes
 
 - name: Check MORK container status
   docker_container_info:
     name: mork_container
   register: mork_service
+  ignore_errors: yes
+  become: no
   ignore_errors: yes
 
 - name: Print MORK deployment status
@@ -141,3 +149,4 @@
       ❌ Deployment incomplete: MORK service is down.
         - mork_container is DOWN. Start with: docker start mork_container
       {% endif %}
+  become: no
