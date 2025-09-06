@@ -1,48 +1,87 @@
 ---
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no
+
 - name: Ensure UI directory exists
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/services/annotation-ui"
+    path: "{{ ansible_env.HOME }}/services/annotation-ui"
     state: directory
     mode: '0755'
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "{{ ansible_user_id | default(ansible_user) }}"
-
-- name: Clone UI repository
-  ansible.builtin.git:
-    repo: "https://github.com/yisehak-awm/annotation-tool.git"
-    dest: "{{ ansible_user_dir }}/services/annotation-ui"
-    version: writer
-    force: yes
-    update: yes
 
 - name: Copy .env file for UI
   ansible.builtin.copy:
     src: "templates/UI.env"
-    dest: "{{ ansible_user_dir }}/services/annotation-ui/.env"
+    dest: "{{ ansible_env.HOME }}/services/annotation-ui/.env"
     mode: '0644'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
     force: yes
 
-- name: Copy docker run script
+- name: Copy Dockerfile to UI directory
   ansible.builtin.copy:
-    src: "files/docker-ui-run.sh"
-    dest: "{{ ansible_user_dir }}/services/annotation-ui/docker-ui-run.sh"
-    mode: '0755'
+    src: "files/Dockerfile"
+    dest: "{{ ansible_env.HOME }}/services/annotation-ui/Dockerfile"
+    mode: '0644'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
     force: yes
 
-- name: Ensure docker run script is executable
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/services/annotation-ui/docker-ui-run.sh"
-    mode: '0755'
-    state: file
+- name: Run uv setup 
+  command: uv run setup.py
+  args:
+    chdir: "{{ playbook_dir }}/.."
+  become: no
 
-- name: Run UI Docker build and container via script
-  ansible.builtin.command:
-    cmd: "{{ ansible_user_dir }}/services/annotation-ui/docker-ui-run.sh"
-    chdir: "{{ ansible_user_dir }}/services/annotation-ui"
+- name: Build and run UI container
+  block:
+    - name: Stop and remove existing container if it exists
+      shell: |
+        if docker ps -a --format '{{ "{{" }}.Names{{ "}}" }}' | grep -Eq '^ui$'; then
+          docker stop ui
+          docker rm ui
+        fi
+      ignore_errors: yes
+
+    - name: Free port 3000 if any process is using it
+      shell: |
+        if lsof -i :3000 > /dev/null; then
+          sudo kill -9 $(lsof -t -i :3000)
+        fi
+      ignore_errors: yes
+
+    - name: Remove existing Docker image and clear cache
+      shell: |
+        docker rmi -f ui:latest || true
+        docker builder prune -f  # This clears the build cache
+      ignore_errors: yes
+
+    - name: Build Docker image 
+      community.docker.docker_image:
+        name: ui
+        tag: latest
+        source: build
+        build:
+          path: "{{ ansible_env.HOME }}/services/annotation-ui"
+          dockerfile: Dockerfile
+          nocache: yes  # Force no cache
+          network: host
+        force_source: yes
+        state: present
+
+    - name: Run UI container
+      community.docker.docker_container:
+        name: ui
+        image: ui:latest
+        state: started
+        restart_policy: unless-stopped
+        env_file: "{{ ansible_env.HOME }}/services/annotation-ui/.env"
+        ports:
+          - "3000:3000"
+        network_mode: host
 
 - name: Get network interfaces information
   ansible.builtin.shell:
@@ -84,6 +123,7 @@
   shell: docker ps --filter "name=atomspace-api" --filter "status=running" -q
   register: custom_atomspace_status
   changed_when: false
+  ignore_errors: yes
 
 - name: Check if Annotation container is running
   shell: docker ps --filter "name=annotation_annotation_service_1" --filter "status=running" -q
@@ -94,10 +134,12 @@
       ip -o -4 addr show scope global | awk '{print $4}' | cut -d'/' -f1
   register: network_ips
   changed_when: false
+  ignore_errors: yes
 
 - name: Filter out common internal/docker IP ranges
   set_fact:
     valid_ips: "{{ network_ips.stdout_lines | reject('match', '^127\\.') | reject('match', '^172\\.1[7-9]\\.') | reject('match', '^172\\.2[0-9]\\.') | reject('match', '^172\\.3[0-1]\\.') | reject('match', '^10\\.') | reject('match', '^192\\.168\\.') | reject('match', '^169\\.254\\.') | list }}"
+  ignore_errors: yes
 
 - name: Get default gateway IP for the Annotation_UI
   ansible.builtin.shell:
@@ -105,31 +147,37 @@
       ip route get 1.1.1.1 | awk '{print $7}' | head -1
   register: gateway_ip
   changed_when: false
+  ignore_errors: yes
 
 - name: Create prioritized list of working URLs
   set_fact:
     working_urls: "{{ ['http://localhost:3000'] }}"
+  ignore_errors: yes
 
 - name: Add gateway IP to URLs for the Annotation_UI
   set_fact:
     working_urls: "{{ working_urls + ['http://' + gateway_ip.stdout + ':3000'] }}"
   when: gateway_ip.stdout and gateway_ip.stdout not in valid_ips
+  ignore_errors: yes
 
 - name: Add other valid IPs to URLs
   set_fact:
     working_urls: "{{ working_urls + ['http://' + item + ':3000'] }}"
   loop: "{{ valid_ips }}"
   when: item != gateway_ip.stdout
+  ignore_errors: yes
 
 - name: Check if Custom Atomspace Builder container is running
   shell: docker ps --filter "name=atomspace-api" --filter "status=running" -q
   register: custom_atomspace_status
   changed_when: false
+  ignore_errors: yes
 
 - name: Check if Annotation container is running
   shell: docker ps --filter "name=annotation_annotation_service_1" --filter "status=running" -q
   register: annotation_status
   changed_when: false
+  ignore_errors: yes
 
 - name: Display deployment confirmation 
   pause:
@@ -150,7 +198,7 @@
           Please start them before using the UI!
       {% endif %}
       
-      📂 Installed at: {{ ansible_user_dir }}/services/annotation-ui
+      📂 Installed at: {{ ansible_env.HOME }}/services/annotation-ui
       
       🎯 YOUR ANNOTATION PORTAL:
       ================================================================
@@ -161,9 +209,9 @@
       
       🎮 HOW TO ACCESS:
       - 🐧 WSL users? -> Use IP addresses above (not localhost!)
-      - 🖥️ Linux/Mac? -> http://localhost:3000 OR IP addresses
+      - 🖥 Linux/Mac? -> http://localhost:3000 OR IP addresses
       - 🌍 Remote access? -> Use IP addresses only
-      - 🛡️ Connection issues? -> Check port 3000 in firewall
+      - 🛡 Connection issues? -> Check port 3000 in firewall
       - 📱 Mobile device? -> Any IP address works on mobile too!
       
       🔍 NEED TO DEBUG?

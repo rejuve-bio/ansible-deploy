@@ -36,7 +36,7 @@
 - name: Run uv setup 
   command: uv run setup.py
   args:
-    chdir: "{{ playbook_dir }}"
+    chdir: "{{ playbook_dir }}/.."
   become: no
 
 - name: Check for available Docker Compose command
