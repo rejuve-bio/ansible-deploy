@@ -4,8 +4,29 @@ import subprocess
 import sys
 import os
 import grp
-import os
-import subprocess
+
+def notify_prerequisites():
+    """Notify user about all packages that should be updated/installed before running the playbook"""
+    print("💡 Please ensure the following packages are updated/installed before running the playbook:")
+    print("=" * 60)
+    print("1. System updates:")
+    print("   sudo apt update")
+    print("   sudo apt upgrade -y")
+    print()
+    print("2. Ansible installation:")
+    print("   sudo apt install ansible")
+    print()
+    print("3. Docker group configuration:")
+    print("   sudo usermod -aG docker $USER")
+    print("   newgrp docker")
+    print()
+    print("4. Ansible community.docker collection:")
+    print("   ansible-galaxy collection install community.docker")
+    print()
+    print("5. Make installation:")
+    print("   sudo apt install make")
+    print("=" * 60)
+    print()
 
 def install_uv():
     """Install UV into the current user's ~/.local/bin"""
@@ -129,7 +150,7 @@ def check_docker():
             
             # Add user to docker group
             add_to_group = subprocess.run(
-                ["usermod", "-aG", "docker", current_user],
+                ["sudo", "usermod", "-aG", "docker", current_user],
                 capture_output=True,
                 text=True,
                 timeout=10
@@ -137,8 +158,23 @@ def check_docker():
             
             if add_to_group.returncode == 0:
                 print("✅ Added user to docker group successfully.")
-                print("💡 Please log out and back in for changes to take effect, or run: newgrp docker")
-                # Continue anyway since Docker might work with sudo
+                
+                # Apply group changes immediately without logging out
+                print("🔄 Applying group changes immediately...")
+                try:
+                    subprocess.run(
+                        ["newgrp", "docker"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    print("✅ Group changes applied successfully.")
+                except subprocess.TimeoutExpired:
+                    print("⚠️  newgrp command completed (timeout is expected)")
+                except Exception as e:
+                    print(f"⚠️  Could not apply group changes immediately: {e}")
+                    print("💡 Please log out and back in for changes to take full effect.")
+                
             else:
                 print(f"❌ Failed to add user to docker group: {add_to_group.stderr}")
                 # Continue anyway since Docker might work with sudo
@@ -224,6 +260,9 @@ def check_docker_compose():
 def main():
     print("🔍 Checking prerequisites...")
     print("=" * 50)
+    
+    # Show all prerequisite notifications
+    notify_prerequisites()
     
     uv_ok = check_uv()
     print()

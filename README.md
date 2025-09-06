@@ -20,13 +20,23 @@ An infrastructure automation project for deploying Rejuve Bio’s core services 
 ### Prerequisites
 
 - Python 3.8+  
-- Ansible 2.10+  
+- Ansible 2.10+ 
+- docker
+- docker-compose 
+- add user to docker group
+- community.docker installation
+- make
 - SSH access to your target servers (to deploy on remote server)
 # Update package lists and upgrade all dependencies without issues
 
 ```bash
 sudo apt update
 sudo apt upgrade -y
+udo apt install ansible
+sudo usermod -aG docker $USER
+ansible-galaxy collection install community.docker
+sudo apt install make
+
 ``` 
 
 ---
