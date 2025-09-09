@@ -20,9 +20,24 @@ An infrastructure automation project for deploying Rejuve Bio’s core services 
 ### Prerequisites
 
 - Python 3.8+  
-- Ansible 2.10+  
-- SSH access to your target servers  
-- Passwordless `sudo` access for deployment user  
+- Ansible 2.10+ 
+- docker
+- docker-compose 
+- add user to docker group
+- community.docker installation
+- make
+- SSH access to your target servers (to deploy on remote server)
+# Update package lists and upgrade all dependencies without issues
+
+```bash
+sudo apt update
+sudo apt upgrade -y
+udo apt install ansible
+sudo usermod -aG docker $USER
+ansible-galaxy collection install community.docker
+sudo apt install make
+
+``` 
 
 ---
 # Setup Instructions for an existing machine
@@ -59,9 +74,9 @@ ansible-deploy/
 │ └── tasks/main.yml
 ---
 ```
-# Step by Step Guide
+### Step by Step Guide
 
-## Ansible Deployment for the  Custom Atomspace Builder ,the Generic Annotation service and UI
+### Ansible Deployment for the  Rejuve Bio Services
 
 This guide walks through deploying the Rejuve Bio applications using Ansible.
 
@@ -114,16 +129,14 @@ Replace these placeholders:
 
 ### 4. Configure Environment Files
 
-# For Custom Atomspace Builder:
-# Edit only the following lines in:
-# playbooks/roles/Custom_Atomspace_builder/templates/custom-atomspace-builder.env
+#### For Custom Atomspace Builder:Edit only the following lines in:
+#### playbooks/roles/Custom_Atomspace_builder/templates/custom-atomspace-builder.env
 ```bash
 LLM_PROVIDER="openai" or "gemini" 
 LLM_API_KEY="your_api_key_here"
 ```
-# For Annotation Service:
-# Edit only the following lines in:
-# playbooks/roles/Annotation/templates/.env
+#### For Annotation Service:Edit only the following lines in:
+#### playbooks/roles/Annotation/templates/.env
 ```bash
 LLM_MODEL="openai" or gemini
 OPENAI_API_KEY="your_LLM_API_KEY_here"
@@ -137,7 +150,7 @@ Execute the playbook with:
 ```cd /ansible-deploy``` run from the root directory
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass
+ansible-playbook-v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass
 ```
 
 #### to deploy only the Custom Atomspace Builder
@@ -145,7 +158,7 @@ ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_
 ```cd /ansible-deploy``` run from the root directory
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass
+ansible-playbook-v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass
 ```
 
 #### to deploy only the annotation
@@ -153,31 +166,47 @@ ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Cus
 ```cd /ansible-deploy``` run from the root directory
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags annotation_Local --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags annotation_Local --ask-become-pass
 ```
 
-#### to deplay with MORK database
+#### to deploy with MORK database
 
 ```cd /ansible-deploy``` run from the root directory
 
 ```bash 
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml   --tags MORK_Local --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags MORK_Local --ask-become-pass
 ```
 
-#### to deplay all with only Neo4j database
+#### to deploy only AI_Assistant
+
+```cd /ansible-deploy``` run from the root directory
+
+```bash 
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags AI_Assistant_Local --ask-become-pass
+```
+
+#### to deploy only Hypothesis Generation
+
+```cd /ansible-deploy``` run from the root directory
+
+```bash 
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags hypothesis_Local --ask-become-pass
+```
+
+#### to deploy Annotation_UI,custom-atomspace-builder and the Generic Annotation with only Neo4j database
 
 ```cd /ansible-deploy``` run from the root directory 
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,local_network --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,local_network --ask-become-pass
 ```
 
-#### to deplay all with MORK database
+#### to deploy Annotation_UI,custom-atomspace-builder and the Generic Annotation with MORK database
 
 ```cd /ansible-deploy``` run from the root directory 
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,MORK_Local,local_network --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,MORK_Local,local_network --ask-become-pass
 ```
 Enter your sudo password when prompted.
 
@@ -186,7 +215,7 @@ Enter your sudo password when prompted.
 ```update  hosts.ini```
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml --tags UI_Remote,annotation_Remote,Custom_Atomspace_builder_Remote --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml --tags UI_Remote,annotation_Remote,Custom_Atomspace_builder_Remote --ask-become-pass
 ```
 
 ## Summary

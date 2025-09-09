@@ -72,4 +72,29 @@ else
     echo "⚠️ mork_container container not found"
 fi
 
+# AI Assistant containers
+# Connect ai-assistant-assistant-1
+if docker inspect ai-assistant-assistant-1 >/dev/null 2>&1; then
+    echo "🔹 Connecting ai-assistant-assistant-1 to rejuve-services-net"
+    docker network connect rejuve-services-net ai-assistant-assistant-1 2>/dev/null || echo "ℹ️ ai-assistant-assistant-1 already connected"
+else
+    echo "⚠️ ai-assistant-assistant-1 container not found"
+fi
+
+# Connect ai-assistant-qdrant-1
+if docker inspect ai-assistant-qdrant-1 >/dev/null 2>&1; then
+    echo "🔹 Connecting ai-assistant-qdrant-1 to rejuve-services-net"
+    docker network connect rejuve-services-net ai-assistant-qdrant-1 2>/dev/null || echo "ℹ️ ai-assistant-qdrant-1 already connected"
+else
+    echo "⚠️ ai-assistant-qdrant-1 container not found"
+fi
+
+# Connect ai-assistant-redis-1
+if docker inspect ai-assistant-redis-1 >/dev/null 2>&1; then
+    echo "🔹 Connecting ai-assistant-redis-1 to rejuve-services-net"
+    docker network connect rejuve-services-net ai-assistant-redis-1 2>/dev/null || echo "ℹ️ ai-assistant-redis-1 already connected"
+else
+    echo "⚠️ ai-assistant-redis-1 container not found"
+fi
+
 echo "✅ Network setup complete!"

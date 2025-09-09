@@ -1,45 +1,17 @@
-- name: Fix dpkg if interrupted
-  command: dpkg --configure -a
-  ignore_errors: yes
-  tags: annotation
-  become: yes
+#Generic-Annotation Service
 
-- name: Update apt cache
-  apt:
-    update_cache: yes
-  become: yes
-  tags: annotation
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no 
 
 - name: Gather installed packages facts
   ansible.builtin.package_facts:
     manager: auto
   tags: annotation
-
-- name: Install required system packages  
-  become: yes
-  apt:
-    name: >
-      {{
-        ['docker-compose', 'python3', 'python3-pip', 'git']
-        + ([] if (ansible_facts.packages.keys() | select('search', 'containerd') | list | length > 0) else ['docker.io'])
-      }}
-    state: present
-    update_cache: yes
-  tags: annotation
-
-- name: Ensure Docker service is running
-  service:
-    name: docker
-    state: started
-    enabled: yes
-  tags: annotation
-
-- name: Add current user to docker group
-  user:
-    name: "{{ ansible_user_id | default(ansible_user) }}"
-    groups: docker
-    append: yes
-  tags: annotation
+  become: no
 
 - name: Create project directory
   file:
@@ -49,6 +21,7 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
   tags: annotation
+  become: no 
 
 - name: Clone the Annotation repository
   git:
@@ -57,14 +30,7 @@
     version: feature/mork-support
     force: yes
   tags: annotation
-
-- name: Modify requirements.txt
-  replace:
-    path: "{{ ansible_user_dir }}/services/Annotation/requirements.txt"
-    regexp: '^biocypher>=0\.5\.4$'
-    replace: 'biocypher==0.5.4\npandas>=1.3.0'
-    backup: yes
-  tags: annotation
+  become: no
 
 - name: Create required data directories
   file:
@@ -77,6 +43,7 @@
     - "{{ ansible_user_dir }}/services/Annotation/metta_data"
     - "{{ ansible_user_dir }}/services/Annotation/cypher_data"
   tags: annotation
+  become: no
 
 - name: Copy pre-configured .env file to remote
   copy:
@@ -86,6 +53,7 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
   tags: annotation
+  become: no
 
 - name: Copy pre-configured docker-compose file to remote
   template:
@@ -95,21 +63,57 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
   tags: annotation
+  become: no
+
+- name: Run uv setup 
+  command: uv run setup.py
+  args:
+    chdir: "{{ playbook_dir }}/.."
+  become: no
+
+# Docker Compose command detection
+- name: Check for available Docker Compose command
+  block:
+    - name: Check if docker compose v2 is available
+      command: docker compose version
+      register: docker_compose_v2_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Check if docker-compose v1 is available
+      command: which docker-compose
+      register: docker_compose_v1_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Set compose command fact
+      set_fact:
+        docker_compose_command: "{{ 'docker compose' if docker_compose_v2_check.rc == 0 else 'docker-compose' if docker_compose_v1_check.rc == 0 else '' }}"
+      become: no
+
+    - name: Fail if no Docker Compose found
+      fail:
+        msg: "No Docker Compose command found. Please install either docker-compose v1 or docker compose v2."
+      when: docker_compose_command == ''
+      become: no
+  tags: annotation
 
 - name: Clean up existing containers
   shell: |
-    docker-compose -f "{{ ansible_user_dir }}/services/Annotation/docker-compose.yml" down -v
+    sg docker -c "{{ docker_compose_command }} -f {{ ansible_user_dir }}/services/Annotation/docker-compose.yml down -v"
   args:
     executable: /bin/bash
   ignore_errors: yes
   register: cleanup
   changed_when: "'Stopping' in cleanup.stdout"
   tags: annotation
+  become: no
 
 - name: Build and start containers
   shell: |
-    cd "{{ ansible_user_dir }}/services/Annotation"
-    docker-compose up --build -d
+    sg docker -c "cd {{ ansible_user_dir }}/services/Annotation && {{ docker_compose_command }} up --build -d"
   args:
     executable: /bin/bash
   register: compose_up
@@ -117,36 +121,41 @@
   delay: 10
   until: compose_up.rc == 0
   tags: annotation
+  become: no
 
 - name: Verify container status
   shell: |
-    docker ps --filter "name=annotation_service" --format "{{ '{{.Names}} {{.Status}}' }}"
+    sg docker -c "docker ps --filter \"name=annotation_service\" --format \"{{ '{{.Names}} {{.Status}}' }}\""
   register: container_status
   until: "'Up' in container_status.stdout"
   retries: 5
   delay: 10
   failed_when: "'Restarting' in container_status.stdout"
   tags: annotation
+  become: no
 
 - name: Get container logs if verification fails
   shell: |
-    docker logs annotation_annotation_service_1 --tail 50
+    sg docker -c "docker logs annotation_annotation_service_1 --tail 50"
   register: container_logs
   when: container_status.failed
   changed_when: false
   tags: annotation
+  become: no
 
 - name: Display container logs if deployment failed
   debug:
     var: container_logs.stdout_lines
   when: container_status.failed
   tags: annotation
+  become: no
 
 - name: Check Annotation service container status
   docker_container_info:
     name: annotation_annotation_service_1
   register: annotation_service
   ignore_errors: yes
+  become: no
 
 - name: Print Annotation deployment status
   debug:
@@ -156,5 +165,7 @@
         - annotation_annotation_service_1: http://localhost:5800
       {% else %}
       ❌ Deployment incomplete: Annotation service is down.
-        - annotation_annotation_service_1 is DOWN. Start with: docker-compose up -d annotation_annotation_service_1
+        - annotation_annotation_service_1 is DOWN. Start with: {{ docker_compose_command }} up -d annotation_annotation_service_1
       {% endif %}
+  tags: annotation
+  become: no

@@ -21,6 +21,20 @@
   roles:
     - MORK
 
+  # deploy_hypothesis
+- name: Deploy hypothesis Service
+  hosts: Hypothesis_Local
+  tags: hypothesis_Local
+  roles:
+    - Hypothesis
+
+ # deploy_AI_Assistant
+- name: Deploy AI_Assistant
+  hosts: AI_Assistant_Local
+  tags: AI_Assistant_Local
+  roles:
+    - AI_Assistant
+
 # deploy_UI
 - name: Deploy UI Service
   hosts: UI_Local
@@ -30,13 +44,12 @@
 
 #Remote_Deployment
 
-# deploy_UI
-- name: Deploy UI Service
-  hosts: UI_Remote
-  tags: UI_Remote
-  become: true
-  roles:
-    - UI
+# # deploy_UI
+# - name: Deploy UI Service
+#   hosts: UI_Remote
+#   tags: UI_Remote
+#   roles:
+#     - UI
 # # deploy_custom_atomspace 
 # - name: Custom Atomspace builder_Remote
 #   hosts: Custom_Atomspace_builder_Remote

@@ -1,0 +1,27 @@
+[project]
+name = "Ansible-deploy"
+version = "1.0.0"
+description = "Ansible playbooks for deploying Rejuve services"
+requires-python = ">=3.10"
+dependencies = [
+    "ansible-core==2.16.3",
+    "jmespath==1.0.1",
+    "python-dotenv==1.0.1",
+    "pyyaml>=6.0.1",  # for YAML handling in Ansible
+    "jinja2>=3.1.2",  # Template engine used by Ansible
+    "requests>=2.31.0",  # For HTTP API calls in playbooks
+    "ansible-compat>=4.1.10",
+    "packaging>=21.3",
+    "resolvelib>=1.0.1",
+]
+
+
+[tool.uv]
+dev-dependencies = [
+    "ansible-lint<25.9.0",
+    "yamllint>=1.35.1"
+]
+
+[project.scripts]
+# Prerequisite check command
+check-prerequisites = "prerequisite_check:main"
