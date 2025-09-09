@@ -119,6 +119,7 @@
   args:
     chdir: "{{ install_dir }}"
   become: no
+  ignore_errors: yes
 
 # Start HugeGraph container if it exists but not running
 - name: Start HugeGraph container if it exists but not running
