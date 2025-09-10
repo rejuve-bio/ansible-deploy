@@ -176,6 +176,17 @@
   ignore_errors: yes
   become: no
 
+- name: Start HugeGraph container if exists but not running
+  community.docker.docker_container:
+    name: hugegraph-atomspace
+    state: started
+  when:
+    - hugegraph_service.exists | default(false)
+    - hugegraph_service.container.State.Running is defined
+    - not hugegraph_service.container.State.Running
+  ignore_errors: yes
+  become: no
+
 # Check AtomSpace-API container status
 - name: Check AtomSpace-API container status
   community.docker.docker_container_info:
@@ -184,11 +195,33 @@
   ignore_errors: yes
   become: no
 
+- name: Start AtomSpace-API container if exists but not running
+  community.docker.docker_container:
+    name: atomspace-api
+    state: started
+  when:
+    - atomspace_service.exists | default(false)
+    - atomspace_service.container.State.Running is defined
+    - not atomspace_service.container.State.Running
+  ignore_errors: yes
+  become: no
+
 # Check Neo4j container status
 - name: Check Neo4j container status
   community.docker.docker_container_info:
     name: neo4j-atomspace
   register: neo4j_service
+  ignore_errors: yes
+  become: no
+
+- name: Start Neo4j container if exists but not running
+  community.docker.docker_container:
+    name: neo4j-atomspace
+    state: started
+  when:
+    - neo4j_service.exists | default(false)
+    - neo4j_service.container.State.Running is defined
+    - not neo4j_service.container.State.Running
   ignore_errors: yes
   become: no
 
