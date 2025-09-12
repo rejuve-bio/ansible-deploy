@@ -52,30 +52,20 @@
           sudo kill -9 $(lsof -t -i :3000)
         fi
       ignore_errors: yes
+      become: yes
 
-    - name: Remove existing Docker image and clear cache
-      shell: |
-        docker rmi -f ui:latest || true
-        docker builder prune -f  # This clears the build cache
-      ignore_errors: yes
-
-    - name: Build Docker image 
+    - name: Pull prebuilt Docker image
       community.docker.docker_image:
-        name: ui
+        name: abdum1964/ui
         tag: latest
-        source: build
-        build:
-          path: "{{ ansible_env.HOME }}/services/annotation-ui"
-          dockerfile: Dockerfile
-          nocache: yes  # Force no cache
-          network: host
+        source: pull
         force_source: yes
-        state: present
+      ignore_errors: yes
 
     - name: Run UI container
       community.docker.docker_container:
         name: ui
-        image: ui:latest
+        image: abdum1964/ui:latest
         state: started
         restart_policy: unless-stopped
         env_file: "{{ ansible_env.HOME }}/services/annotation-ui/.env"
@@ -217,7 +207,7 @@
       🔍 NEED TO DEBUG?
       - 📊 Live logs: tail -f {{ ansible_user_dir }}/annotation-ui/ui.log
       - 🐳 Container: docker logs ui  
-      - 🔧 Status: docker ps | grep  ui:latest
+      - 🔧 Status: docker ps | grep ui
       
       🎯 START ANNOTATING:
       ================================================================

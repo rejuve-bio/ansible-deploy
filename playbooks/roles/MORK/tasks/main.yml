@@ -19,28 +19,6 @@
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
   become: no
-  
-- name: Clone MORK repository
-  git:
-    repo: https://github.com/DeazStar/MORK.git
-    dest: "{{ ansible_env.HOME }}/services/MORK"
-    version: main
-    force: yes
-  become: no
-
-- name: Run uv setup 
-  command: uv run setup.py
-  args:
-    chdir: "{{ playbook_dir }}/.."
-  become: no
-
-- name: Make script executable
-  file:
-    path: "{{ ansible_env.HOME }}/services/MORK/script.sh"
-    mode: '0755'
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "{{ ansible_user_id | default(ansible_user) }}"
-  become: no
 
 # Docker Compose command detection 
 - name: Check for available Docker Compose command
@@ -70,13 +48,6 @@
       when: docker_compose_command == ''
       become: no
 
-- name: Build Docker image
-  shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/MORK && docker build -t mork_pathmap ."
-  args:
-    executable: /bin/bash
-  become: no
-
 - name: Create data directory for MORK
   file:
     path: "{{ ansible_env.HOME }}/services/MORK/data"
@@ -86,24 +57,51 @@
     group: "{{ ansible_user_id | default(ansible_user) }}"
   become: no
 
-- name: Clean up existing MORK container
+- name: Clean up existing MORK container and free port
+  block:
+    - name: Stop and remove existing MORK container
+      shell: |
+        sg docker -c "docker stop mork_container || true && docker rm mork_container || true"
+      args:
+        executable: /bin/bash
+      ignore_errors: yes
+      become: no
+
+    - name: Free Mork port
+      shell: |
+        sg docker -c "docker ps -q --filter 'publish=8231' | xargs -r docker stop && \
+        docker ps -a -q --filter 'publish=8231' | xargs -r docker rm"
+      args:
+        executable: /bin/bash
+      ignore_errors: yes
+      become: no
+      changed_when: false
+
+  always:
+    - name: Verify port 8231 is free
+      wait_for:
+        port: 8231
+        state: stopped
+        timeout: 10
+      become: no
+      ignore_errors: yes
+
+- name: Pull latest MORK image
   shell: |
-    sg docker -c "docker stop mork_container || true && docker rm mork_container || true"
+    sg docker -c "docker pull abdum1964/mork_pathmap:latest"
   args:
     executable: /bin/bash
-  ignore_errors: yes
   become: no
 
-- name: Run MORK container
+- name: Run MORK container from latest image
   shell: |
     sg docker -c "docker run -d --name mork_container \
     -p 8231:8231 \
     -v \"{{ ansible_env.HOME }}/services/MORK/data:/shared/output\" \
-    mork_pathmap"
+    abdum1964/mork_pathmap:latest"
   args:
     executable: /bin/bash
   become: no
-  ignore_errors: yes
 
 - name: Verify container is running
   shell: |

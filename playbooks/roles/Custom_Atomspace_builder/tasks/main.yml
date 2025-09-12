@@ -61,6 +61,7 @@
     dest: "{{ install_dir }}/config.yaml"
     mode: '0664'
   become: no
+  ignore_errors: yes
 
 # Create .env file with proper permissions
 - name: Configure .env file from template
@@ -70,12 +71,14 @@
     mode: '0664'
     owner: "{{ ansible_user_id }}"
   become: no
+  ignore_errors: yes
 
 - name: Run uv setup 
   command: uv run setup.py
   args:
     chdir: "{{ playbook_dir }}/.."
   become: no
+  ignore_errors: yes
 
 # Docker Compose command detection
 - name: Check for available Docker Compose command
@@ -104,6 +107,23 @@
         msg: "No Docker Compose command found. Please install either docker-compose v1 or docker compose v2."
       when: docker_compose_command == ''
       become: no
+
+# Clean up ports 8080, 8001, 7474  
+- name: Free up ports  
+  shell: |
+    for port in 8080 8001 7474; do
+      echo "Freeing up port $port"
+      # Get the PIDs of docker-proxy processes for this port
+      pids=$(sudo ss -tulpn | grep ":$port " | grep docker-proxy | awk '{print $6}' | cut -d= -f2 | cut -d, -f1 | uniq || true)
+      if [ -n "$pids" ]; then
+        echo "free up  docker-proxy processes for port $port: $pids"
+        sudo kill -9 $pids 2>/dev/null || true
+      else
+        echo "No docker-proxy processes found for port $port"
+      fi
+    done
+  ignore_errors: yes
+  become: yes
 
 - name: Clean up existing containers
   shell: |
