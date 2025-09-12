@@ -9,92 +9,138 @@ else
 fi
 
 # Connect atomspace-api
-if docker inspect atomspace-api >/dev/null 2>&1; then
-    echo "🔹 Connecting atomspace-api to rejuve-services-net"
-    docker network connect rejuve-services-net atomspace-api 2>/dev/null || echo "ℹ️ atomspace-api already connected"
-else
-    echo "⚠️ atomspace-api container not found"
-fi
+for name in atomspace-api atomspace_api; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# Connect annotation_annotation_service_1
-if docker inspect annotation_annotation_service_1 >/dev/null 2>&1; then
-    echo "🔹 Connecting annotation_annotation_service_1 to rejuve-services-net"
-    docker network connect rejuve-services-net annotation_annotation_service_1 2>/dev/null || echo "ℹ️ annotation container already connected"
-else
-    echo "⚠️ annotation_annotation_service_1 container not found"
-fi
+# Connect annotation_annotation_service_1 
+for name in annotation_annotation_service_1 annotation-annotation-service-1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ annotation container already connected"
+        break
+    fi
+done
 
-# Connect annotation_redis_1
-if docker inspect annotation_redis_1 >/dev/null 2>&1; then
-    echo "🔹 Connecting annotation_redis_1 to rejuve-services-net"
-    docker network connect rejuve-services-net annotation_redis_1 2>/dev/null || echo "ℹ️ annotation_redis_1 already connected"
-else
-    echo "⚠️ annotation_redis_1 container not found"
-fi
+# Connect annotation_redis_1 
+for name in annotation_redis_1 annotation-redis-1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# Connect annotation_caddy_1
-if docker inspect annotation_caddy_1 >/dev/null 2>&1; then
-    echo "🔹 Connecting annotation_caddy_1 to rejuve-services-net"
-    docker network connect rejuve-services-net annotation_caddy_1 2>/dev/null || echo "ℹ️ annotation_caddy_1 already connected"
-else
-    echo "⚠️ annotation_caddy_1 container not found"
-fi
+# Connect annotation_caddy_1 
+for name in annotation_caddy_1 annotation-caddy-1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# Connect annotation_mongodb_1
-if docker inspect annotation_mongodb_1 >/dev/null 2>&1; then
-    echo "🔹 Connecting annotation_mongodb_1 to rejuve-services-net"
-    docker network connect rejuve-services-net annotation_mongodb_1 2>/dev/null || echo "ℹ️ annotation_mongodb_1 already connected"
-else
-    echo "⚠️ annotation_mongodb_1 container not found"
-fi
+# Connect annotation_mongodb_1 
+for name in annotation_mongodb_1 annotation-mongodb-1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# Connect hugegraph-atomspace
-if docker inspect hugegraph-atomspace >/dev/null 2>&1; then
-    echo "🔹 Connecting hugegraph-atomspace to rejuve-services-net"
-    docker network connect rejuve-services-net hugegraph-atomspace 2>/dev/null || echo "ℹ️ hugegraph-atomspace already connected"
-else
-    echo "⚠️ hugegraph-atomspace container not found"
-fi
+# Connect hugegraph-atomspace 
+for name in hugegraph-atomspace hugegraph_atomspace; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# Connect neo4j-atomspace
-if docker inspect neo4j-atomspace >/dev/null 2>&1; then
-    echo "🔹 Connecting neo4j-atomspace to rejuve-services-net"
-    docker network connect rejuve-services-net neo4j-atomspace 2>/dev/null || echo "ℹ️ neo4j-atomspace already connected"
-else
-    echo "⚠️ neo4j-atomspace container not found"
-fi
+# Connect neo4j-atomspace 
+for name in neo4j-atomspace neo4j_atomspace; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# Connect mork_container
-if docker inspect mork_container >/dev/null 2>&1; then
-    echo "🔹 Connecting mork_container to rejuve-services-net"
-    docker network connect rejuve-services-net mork_container 2>/dev/null || echo "ℹ️ mork_container already connected"
-else
-    echo "⚠️ mork_container container not found"
-fi
+# Connect mork_container 
+for name in mork_container mork-container; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# AI Assistant containers
-# Connect ai-assistant-assistant-1
-if docker inspect ai-assistant-assistant-1 >/dev/null 2>&1; then
-    echo "🔹 Connecting ai-assistant-assistant-1 to rejuve-services-net"
-    docker network connect rejuve-services-net ai-assistant-assistant-1 2>/dev/null || echo "ℹ️ ai-assistant-assistant-1 already connected"
-else
-    echo "⚠️ ai-assistant-assistant-1 container not found"
-fi
+# Connect ai-assistant-assistant-1 
+for name in ai-assistant-assistant-1 ai_assistant_assistant_1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# Connect ai-assistant-qdrant-1
-if docker inspect ai-assistant-qdrant-1 >/dev/null 2>&1; then
-    echo "🔹 Connecting ai-assistant-qdrant-1 to rejuve-services-net"
-    docker network connect rejuve-services-net ai-assistant-qdrant-1 2>/dev/null || echo "ℹ️ ai-assistant-qdrant-1 already connected"
-else
-    echo "⚠️ ai-assistant-qdrant-1 container not found"
-fi
+# Connect ai-assistant-qdrant-1 
+for name in ai-assistant-qdrant-1 ai_assistant_qdrant_1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
-# Connect ai-assistant-redis-1
-if docker inspect ai-assistant-redis-1 >/dev/null 2>&1; then
-    echo "🔹 Connecting ai-assistant-redis-1 to rejuve-services-net"
-    docker network connect rejuve-services-net ai-assistant-redis-1 2>/dev/null || echo "ℹ️ ai-assistant-redis-1 already connected"
-else
-    echo "⚠️ ai-assistant-redis-1 container not found"
-fi
+# Connect ai-assistant-redis-1 
+for name in ai-assistant-redis-1 ai_assistant_redis_1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
+
+# Connect authentication-service-web-1
+for name in authentication-service-web-1 authentication_service_web_1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
+
+# Connect authentication-service-db-1
+for name in authentication-service-db-1 authentication_service_db_1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
+
+# Connect ui container
+for name in ui ui-1; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
+
+# Connect hypothesis-ui container
+for name in hypothesis-ui hypothesis_ui; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+        echo "🔹 Connecting $name to rejuve-services-net"
+        docker network connect rejuve-services-net "$name" 2>/dev/null || echo "ℹ️ $name already connected"
+        break
+    fi
+done
 
 echo "✅ Network setup complete!"
