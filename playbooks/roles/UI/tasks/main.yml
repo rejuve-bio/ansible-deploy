@@ -35,9 +35,25 @@
   args:
     chdir: "{{ playbook_dir }}/.."
   become: no
+  ignore_errors: yes
 
 - name: Build and run UI container
   block:
+
+    - name: Free up port 3000
+      shell: |
+        port=3000
+        echo "Checking port $port"
+        pids=$(sudo lsof -t -i :$port || true)
+        if [ -n "$pids" ]; then
+          echo "Killing processes using port $port: $pids"
+          sudo kill -9 $pids 2>/dev/null || true
+        else
+          echo "No processes found using port $port"
+        fi
+      ignore_errors: yes
+      become: yes    
+
     - name: Stop and remove existing container if it exists
       shell: |
         if docker ps -a --format '{{ "{{" }}.Names{{ "}}" }}' | grep -Eq '^ui$'; then
@@ -45,14 +61,6 @@
           docker rm ui
         fi
       ignore_errors: yes
-
-    - name: Free port 3000 if any process is using it
-      shell: |
-        if lsof -i :3000 > /dev/null; then
-          sudo kill -9 $(lsof -t -i :3000)
-        fi
-      ignore_errors: yes
-      become: yes
 
     - name: Pull prebuilt Docker image
       community.docker.docker_image:
