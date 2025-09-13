@@ -108,18 +108,17 @@
       when: docker_compose_command == ''
       become: no
 
-# Clean up ports 8080, 8001, 7474  
-- name: Free up ports  
+- name: Free up ports
   shell: |
     for port in 8080 8001 7474; do
-      echo "Freeing up port $port"
-      # Get the PIDs of docker-proxy processes for this port
-      pids=$(sudo ss -tulpn | grep ":$port " | grep docker-proxy | awk '{print $6}' | cut -d= -f2 | cut -d, -f1 | uniq || true)
+      echo "Checking port $port"
+      # Find any PID using the port
+      pids=$(sudo lsof -t -i :$port || true)
       if [ -n "$pids" ]; then
-        echo "free up  docker-proxy processes for port $port: $pids"
+        echo "Killing processes using port $port: $pids"
         sudo kill -9 $pids 2>/dev/null || true
       else
-        echo "No docker-proxy processes found for port $port"
+        echo "No processes found using port $port"
       fi
     done
   ignore_errors: yes

@@ -59,6 +59,21 @@
 
 - name: Clean up existing MORK container and free port
   block:
+
+    - name: Free up port 8231
+      shell: |
+        port=8231
+        echo "Checking port $port"
+        pids=$(sudo lsof -t -i :$port || true)
+        if [ -n "$pids" ]; then
+          echo "Killing processes using port $port: $pids"
+          sudo kill -9 $pids 2>/dev/null || true
+        else
+          echo "No processes found using port $port"
+        fi
+      ignore_errors: yes
+      become: yes
+
     - name: Stop and remove existing MORK container
       shell: |
         sg docker -c "docker stop mork_container || true && docker rm mork_container || true"
@@ -66,16 +81,6 @@
         executable: /bin/bash
       ignore_errors: yes
       become: no
-
-    - name: Free Mork port
-      shell: |
-        sg docker -c "docker ps -q --filter 'publish=8231' | xargs -r docker stop && \
-        docker ps -a -q --filter 'publish=8231' | xargs -r docker rm"
-      args:
-        executable: /bin/bash
-      ignore_errors: yes
-      become: no
-      changed_when: false
 
   always:
     - name: Verify port 8231 is free
