@@ -2,55 +2,48 @@ services:
   assistant:
     image: abdum1964/ai-assistant:staging
     ports:
-      - "5003:5002"   
+      - "5003:5002"
     command: >
       sh -c "
-       
       gunicorn -w 2 --bind 0.0.0.0:5002 --timeout 300 run:app
       "
     depends_on:
       - qdrant
       - redis
       - mongodb
-    environment:
-      BASIC_LLM_PROVIDER: gemini
-      BASIC_LLM_VERSION: gemini-lite
-      ADVANCED_LLM_PROVIDER: gemini
-      ADVANCED_LLM_VERSION: gemini-pro
-      FLASK_PORT: 5002
-      JWT_SECRET: ${JWT_SECRET}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      REDIS_URL: redis://redis:6379/0
-      MONGODB_HOST: mongodb
-      MONGODB_PORT: 27017
-      MONGO_USERNAME: ${MONGO_USERNAME}
-      MONGO_PASSWORD: ${MONGO_PASSWORD}
-      MONGO_DATABASE: ${MONGO_DATABASE}
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: 6333
-      MODEL_PATH: ./models
-      MONGO_URL: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DATABASE}?authSource=admin
+    env_file:
+      - .env
     volumes:
       - ./logfiles:/AI-Assistant/logfiles
+      - static:/AI-Assistant/static
+    restart: always
 
   qdrant:
     image: qdrant/qdrant:latest
     ports:
-      - "6335:6333"   
-      - "6336:6334"  
+      - "6335:6333"
+      - "6336:6334"
+    volumes:
+      - vectordata:/qdrant/storage
+    restart: always
+
   redis:
     image: redis:6-alpine
     ports:
-      - "6381:6379"   
+      - "6381:6379"
+    restart: always
 
   mongodb:
     image: mongo:6.0
     ports:
-      - "27018:27017"   
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
-      
-      
+      - "27018:27017"
+    env_file:
+      - .env
+    volumes:
+      - mongodb_data:/data/db
+    restart: always
+
+volumes:
+  vectordata:
+  static:
+  mongodb_data:
