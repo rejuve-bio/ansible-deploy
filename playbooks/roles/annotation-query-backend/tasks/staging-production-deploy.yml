@@ -1,0 +1,127 @@
+---
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no
+
+- name: Ensure project directories exist
+  file:
+    path: "{{ ansible_env.HOME }}/services/{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+  loop:
+    - annotation-query-backend
+    - annotation-query-backend/metta_data
+    - annotation-query-backend/metta_data/cypher_data
+  become: no
+  ignore_errors: yes
+
+- name: Copy appropriate docker-compose file based on environment
+  copy:
+    src: "../templates/docker-compose.{{ annotation_environment | default('staging') }}.yml"
+    dest: "{{ ansible_env.HOME }}/services/annotation-query-backend/docker-compose.yml"
+    mode: '0644'
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+  become: no
+
+- name: Check for available Docker Compose command
+  block:
+    - name: Check if docker compose v2 is available
+      command: docker compose version
+      register: docker_compose_v2_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Check if docker-compose v1 is available
+      command: which docker-compose
+      register: docker_compose_v1_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Set compose command fact
+      set_fact:
+        docker_compose_command: "{{ 'docker compose' if docker_compose_v2_check.rc == 0 else 'docker-compose' if docker_compose_v1_check.rc == 0 else '' }}"
+      become: no
+
+    - name: Fail if no Docker Compose found
+      fail:
+        msg: "No Docker Compose command found. Please install either docker-compose v1 or docker compose v2."
+      when: docker_compose_command == ''
+      become: no
+
+- name: Pull latest Docker images
+  shell: |
+    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} pull"
+  args:
+    executable: /bin/bash
+  register: compose_pull
+  retries: 2
+  delay: 10
+  until: compose_pull.rc == 0
+  become: no
+
+- name: Stop and remove existing containers
+  shell: |
+    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} down"
+  args:
+    executable: /bin/bash
+  ignore_errors: yes
+  become: no
+
+- name: Create necessary directories for volumes
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_id }}"
+    group: docker
+  become: no
+  loop:
+    - "{{ ansible_env.HOME }}/services/annotation-query-backend/logfiles"
+    - "{{ ansible_env.HOME }}/services/annotation-query-backend/models"
+
+- name: Start containers with Docker images
+  shell: |
+    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} up -d"
+  args:
+    executable: /bin/bash
+  register: compose_up
+  retries: 3
+  delay: 15
+  until: compose_up.rc == 0
+  become: no
+
+- name: Wait for services to be healthy
+  shell: |
+    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} ps"
+  args:
+    executable: /bin/bash
+  register: compose_ps
+  changed_when: false
+  become: no
+
+- name: Display service status
+  debug:
+    var: compose_ps.stdout
+  become: no
+
+- name: Check service logs for verification
+  shell: |
+    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} logs --tail=20 assistant"
+  args:
+    executable: /bin/bash
+  register: annotation_logs
+  changed_when: false
+  become: no
+
+- name: Display Annotation logs
+  debug:
+    var: annotation_logs.stdout
+  become: no
