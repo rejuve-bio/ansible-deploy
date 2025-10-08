@@ -1,7 +1,7 @@
 services:
   annotation_service:
     image: abdum1964/annotation:production
-    container_name: annotation_service-production   
+    container_name: annotation-service-production   
     volumes:
       - .:/app
     ports:

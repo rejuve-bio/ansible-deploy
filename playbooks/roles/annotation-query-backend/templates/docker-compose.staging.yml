@@ -1,7 +1,7 @@
 services:
   annotation_service:
     image: abdum1964/annotation:staging
-    container_name: annotation_service-staging
+    container_name: annotation-service-staging
     volumes:
       - .:/app
     ports:

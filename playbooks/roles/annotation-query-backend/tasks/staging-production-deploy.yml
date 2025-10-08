@@ -6,6 +6,15 @@
   changed_when: false
   become: no
 
+- name: Clone annotation-query-backend repository
+  git:
+    repo: https://github.com/Abdu1964/annotation-query-backend.git
+    dest: "{{ ansible_env.HOME }}/services/annotation-query-backend"
+    version: "{{ deployment_branch | default('staging') }}"
+    update: yes
+    force: yes
+  become: no
+
 - name: Ensure project directories exist
   file:
     path: "{{ ansible_env.HOME }}/services/{{ item }}"
@@ -114,7 +123,7 @@
 
 - name: Check service logs for verification
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} logs --tail=20 assistant"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && docker logs --tail=20 annotation-service-staging"
   args:
     executable: /bin/bash
   register: annotation_logs
