@@ -26,15 +26,6 @@
   become: no
   ignore_errors: yes
 
-- name: Copy pre-configured .env file to remote
-  copy:
-    src: templates/.env
-    dest: "{{ ansible_env.HOME }}/services/Authentication_service/.env"
-    mode: '0640'
-    owner: "{{ ansible_user_id | default(ansible_user) }}"
-    group: "{{ ansible_user_id | default(ansible_user) }}"
-  become: no
-
 - name: Copy appropriate docker-compose file based on environment
   copy:
     src: "../templates/docker-compose.{{ Authentication_service_environment | default('staging') }}.yml"
