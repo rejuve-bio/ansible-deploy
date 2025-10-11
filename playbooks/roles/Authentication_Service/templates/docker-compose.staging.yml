@@ -1,0 +1,35 @@
+version: '3.8'
+services:
+  auth-service:
+    image: abdum1964/auth-service:staging   
+    ports:
+      - "5004:5002"   
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env   
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: auth_service_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d auth_service_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
