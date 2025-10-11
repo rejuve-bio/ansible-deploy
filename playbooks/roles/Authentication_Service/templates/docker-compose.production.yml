@@ -2,9 +2,8 @@ version: '3.8'
 services:
   auth-service:
     image: abdum1964/auth-service:production  
-    container_name: auth-service-staging
-    ports:
-      - "5005:5002"   
+    container_name: auth-service-production
+      
     depends_on:
       db:
         condition: service_healthy
@@ -19,11 +18,9 @@ services:
 
   db:
     image: postgres:13
-    container_name: auth-db-staging
-    environment:
-      POSTGRES_DB: auth_service_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+    container_name: auth-db-production
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data   
     restart: unless-stopped
