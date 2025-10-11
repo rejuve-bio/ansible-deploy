@@ -1,0 +1,44 @@
+---
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no
+
+- name: Ensure UI directory exists
+  file:
+    path: "{{ ansible_env.HOME }}/services/platform-ui"
+    state: directory
+    mode: '0755'
+  ignore_errors: yes
+
+- name: Pull prebuilt Docker image
+  community.docker.docker_image:
+    name: "{{ prebuilt_image }}"
+    source: pull
+    force_source: yes
+
+- name: Stop and remove existing container if exists
+  community.docker.docker_container:
+    name: "{{ container_name }}"
+    state: absent
+  ignore_errors: yes
+
+- name: Run UI container from prebuilt image
+  community.docker.docker_container:
+    name: "{{ container_name }}"
+    image: "{{ prebuilt_image }}"
+    state: started
+    restart_policy: unless-stopped
+    env_file: "{{ ansible_env.HOME }}/services/platform-ui/.env"
+    ports:
+      - "{{ ui_port }}"
+
+- name: Display deployment info
+  debug:
+    msg:
+      - "Platform-UI deployed on staging successfully !"
+      - "Image used: {{ prebuilt_image }}"
+      - "Access at: http://localhost:3009"
+      - "Container name: {{ container_name }}"

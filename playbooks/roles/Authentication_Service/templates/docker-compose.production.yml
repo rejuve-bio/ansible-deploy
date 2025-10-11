@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:13
+    container_name: auth-db-production
+    env_file:
+      - .env
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   
+    restart: unless-stopped
+  
+  auth-service:
+    image: abdum1964/auth-service:production  
+    container_name: auth-service-production
+      
+    depends_on:
+      -  db
+    env_file:
+      - .env   
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
