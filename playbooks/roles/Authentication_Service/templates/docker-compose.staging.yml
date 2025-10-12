@@ -26,7 +26,7 @@ services:
       - .env   
     restart: unless-stopped
     ports:
-      - "5005:5005"
+      - "5005:5002"
 
 volumes:
   postgres_data:
