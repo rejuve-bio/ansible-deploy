@@ -6,46 +6,14 @@
   changed_when: false
   become: no
 
-- name: Check if .env file exists
-  stat:
-    path: "{{ ansible_env.HOME }}/services/annotation-query-backend/.env"
-  register: env_file
-
-- name: Backup .env file to home directory
-  copy:
-    src: "{{ ansible_env.HOME }}/services/annotation-query-backend/.env"
-    dest: "{{ ansible_env.HOME }}/.annotation-query-backend.env.backup"
-    remote_src: yes
-  become: no
-  when: env_file.stat.exists
-
-- name: Remove existing directory
-  file:
-    path: "{{ ansible_env.HOME }}/services/annotation-query-backend"
-    state: absent
-  become: no
-
 - name: Clone annotation-query-backend repository
   git:
     repo: https://github.com/Abdu1964/annotation-query-backend.git
     dest: "{{ ansible_env.HOME }}/services/annotation-query-backend"
     version: "{{ deployment_branch | default('staging') }}"
+    update: yes     
+    force: yes      
   become: no
-
-- name: Restore .env file
-  copy:
-    src: "{{ ansible_env.HOME }}/.annotation-query-backend.env.backup"
-    dest: "{{ ansible_env.HOME }}/services/annotation-query-backend/.env"
-    remote_src: yes
-  become: no
-  when: env_file.stat.exists
-
-- name: Cleanup backup file
-  file:
-    path: "{{ ansible_env.HOME }}/.annotation-query-backend.env.backup"
-    state: absent
-  become: no
-  when: env_file.stat.exists
 
 - name: Ensure project directories exist
   file:
