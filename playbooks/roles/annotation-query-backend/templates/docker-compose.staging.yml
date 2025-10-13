@@ -1,6 +1,6 @@
 services:
   annotation_service:
-    image: abdum1964/annotation:staging
+    image: ${DOCKER_IMAGE_STAGING}
     container_name: annotation-service-staging
     volumes:
       - .:/app
@@ -16,8 +16,8 @@ services:
     environment:
       - MONGO_URI=${MONGO_URI}
       - APP_PORT=${APP_PORT}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
 
   mongodb:
     image: mongo:latest
@@ -32,7 +32,7 @@ services:
     image: redis:latest
     container_name: redis-staging
     ports:
-      - "6382:6379"
+      - "${REDIS_HOST}:${REDIS_PORT}"
     restart: always
     volumes:
       - redis_data:/data
