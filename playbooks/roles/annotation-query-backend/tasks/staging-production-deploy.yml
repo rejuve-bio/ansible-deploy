@@ -78,7 +78,7 @@
 
 - name: Stop and remove existing containers
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} down"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} -p deploy down"
   args:
     executable: /bin/bash
   ignore_errors: yes
@@ -98,7 +98,7 @@
 
 - name: Start containers with Docker images
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} up -d"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/annotation-query-backend && {{ docker_compose_command }} -p deploy up -d"    
   args:
     executable: /bin/bash
   register: compose_up
