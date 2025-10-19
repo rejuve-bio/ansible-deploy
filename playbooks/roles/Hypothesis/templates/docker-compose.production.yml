@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:latest
+    container_name: hypothesis-mongo-production
+    ports:
+      - "${MONGO_PORT_HOST}:${MONGO_PORT_INTERNAL}"
+    networks:
+      - app_network_ci
+
+  prolog-service:
+    image: ${prolog_production}
+    container_name: hypothesis-prolog-production
+    ports:
+      - "${PROLOG_PORT_HOST}:${PROLOG_PORT_INTERNAL}"
+    networks:
+      - app_network_ci
+
+  flask-app:
+    image: ${flask_production}
+    container_name: hypothesis-flask-production
+    ports:
+      - "${FLASK_PORT_HOST}:${FLASK_PORT_INTERNAL}"
+    environment:
+      - FLASK_ENV=development
+      - PREFECT_API_URL=http://prefect-service:${PREFECT_PORT_INTERNAL}/api
+    env_file:
+      - .env
+    depends_on:
+      - mongo
+      - prolog-service
+      - prefect-service
+    command: >
+      sh -c "
+      uv run python main.py --ensembl-hgnc-map data/ensembl_to_hgnc.pkl --hgnc-ensembl-map data/hgnc_to_ensembl.pkl \
+      --go-map data/go_map.pkl --swipl-host prolog-service --swipl-port ${PROLOG_PORT_INTERNAL}
+      "
+    networks:
+      - app_network_ci
+
+  prefect-service:
+    image: ${prefect_production}
+    container_name: hypothesis-prefect-production
+    ports:
+      - "${PREFECT_PORT_HOST}:${PREFECT_PORT_INTERNAL}"
+    environment:
+      - PREFECT_API_URL=http://localhost:${PREFECT_PORT_INTERNAL}/api
+      - UV_PROJECT_ENVIRONMENT=/opt/prefect-venv
+    env_file:
+      - .env
+    command: > 
+      sh -c "uv run prefect server start --host 0.0.0.0"
+    networks:
+      - app_network_ci
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PREFECT_PORT_INTERNAL}/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  prefect-deployment:
+    image: ${prefect_deployment_production}
+    container_name: hypothesis-prefect-deployment-production
+    env_file:
+      - .env
+    command: >
+      sh -c "
+      uv run python deployments.py --ensembl-hgnc-map /app/data/ensembl_to_hgnc.pkl 
+      --hgnc-ensembl-map /app/data/hgnc_to_ensembl.pkl 
+      --go-map /app/data/go_map.pkl 
+      --swipl-host prolog-service 
+      --swipl-port ${PROLOG_PORT_INTERNAL}
+      "
+    environment:
+      - PREFECT_API_URL=http://prefect-service:${PREFECT_PORT_INTERNAL}/api
+      - UV_PROJECT_ENVIRONMENT=/opt/prefect-venv
+    depends_on:
+      prefect-service:
+        condition: service_healthy
+    networks:
+      - app_network_ci
+
+volumes:
+  mongo-data-ci:
+  prefect-data-ci:
+
+networks:
+  app_network_ci:
+    driver: bridge
