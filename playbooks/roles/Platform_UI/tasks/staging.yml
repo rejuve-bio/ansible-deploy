@@ -40,5 +40,5 @@
     msg:
       - "Platform-UI deployed on staging successfully !"
       - "Image used: {{ prebuilt_image }}"
-      - "Access at: http://localhost:3009"
+      - "Access at: http://localhost:{{ ui_port }}"
       - "Container name: {{ container_name }}"
