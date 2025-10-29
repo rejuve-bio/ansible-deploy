@@ -8,7 +8,7 @@
 
 - name: Ensure AI Assistant directory exists
   file:
-    path: "{{ ansible_env.HOME }}/services/AI_Assistant"
+    path: "{{ ansible_env.HOME }}/services/AI-Assistant"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id }}"
@@ -18,7 +18,7 @@
 
 - name: Ensure AI Assistant directory exists
   file:
-    path: "{{ ansible_env.HOME }}/services/AI_Assistant/logfiles"
+    path: "{{ ansible_env.HOME }}/services/AI-Assistant/logfiles"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id }}"
@@ -29,7 +29,7 @@
 - name: Copy appropriate docker-compose file based on environment
   copy:
     src: "../templates/docker-compose.{{ ai_assistant_environment | default('staging') }}.yml"
-    dest: "{{ ansible_env.HOME }}/services/AI_Assistant/docker-compose.yml"
+    dest: "{{ ansible_env.HOME }}/services/AI-Assistant/docker-compose.yml"
     mode: '0644'
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
@@ -64,7 +64,7 @@
 
 - name: Pull latest Docker images
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/AI_Assistant && {{ docker_compose_command }} pull"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/AI-Assistant && {{ docker_compose_command }} pull"
   args:
     executable: /bin/bash
   register: compose_pull
@@ -75,7 +75,7 @@
 
 - name: Stop and remove existing containers
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/AI_Assistant && {{ docker_compose_command }} down"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/AI-Assistant && {{ docker_compose_command }} down"
   args:
     executable: /bin/bash
   ignore_errors: yes
@@ -90,12 +90,12 @@
     group: docker
   become: no
   loop:
-    - "{{ ansible_env.HOME }}/services/AI_Assistant/logfiles"
-    - "{{ ansible_env.HOME }}/services/AI_Assistant/models"
+    - "{{ ansible_env.HOME }}/services/AI-Assistant/logfiles"
+    - "{{ ansible_env.HOME }}/services/AI-Assistant/models"
 
 - name: Start containers with Docker images
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/AI_Assistant && {{ docker_compose_command }} up -d"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/AI-Assistant && {{ docker_compose_command }} up -d"
   args:
     executable: /bin/bash
   register: compose_up
@@ -106,7 +106,7 @@
 
 - name: Wait for services to be healthy
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/AI_Assistant && {{ docker_compose_command }} ps"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/AI-Assistant && {{ docker_compose_command }} ps"
   args:
     executable: /bin/bash
   register: compose_ps
@@ -120,7 +120,7 @@
 
 - name: Check service logs for verification
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/AI_Assistant && {{ docker_compose_command }} logs --tail=20 assistant"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/AI-Assistant && {{ docker_compose_command }} logs --tail=20 assistant"
   args:
     executable: /bin/bash
   register: assistant_logs

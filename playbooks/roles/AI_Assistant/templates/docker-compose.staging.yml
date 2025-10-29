@@ -11,6 +11,7 @@ services:
     depends_on:
       - qdrant
       - redis
+      - mongodb
     environment:
       - .env
 
@@ -26,6 +27,18 @@ services:
     restart: always
     ports:
       - "${REDIS_HOST_PORT}:${REDIS_INTERNAL_PORT}"
+
+  mongodb:
+    image: mongo:6.0
+    restart: always
+    ports:
+      - "${MONGODB_HOST_PORT}:${MONGODB_INTERNAL_PORT}"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+
 volumes:
   vectordata:
+  static:
   mongodb_data:
