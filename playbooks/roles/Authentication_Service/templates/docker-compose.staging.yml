@@ -1,0 +1,44 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:13
+    container_name: auth-db-staging  
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"
+    env_file:
+      - .env 
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    image: ${DOCKER_IMAGE_STAGING}
+    container_name: auth-service-staging   
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      bash -c "
+      sleep 5 &&
+      flask db upgrade &&
+      flask run --host=0.0.0.0 --port=5002"
+     
+    ports:
+      - "${HOST_PORT}:5002"
+    env_file:
+      - .env
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

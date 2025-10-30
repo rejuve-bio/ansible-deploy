@@ -1,0 +1,58 @@
+---
+# Hypothesis_UI
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no
+
+- name: Ensure UI directory exists
+  file:
+    path: "{{ ansible_env.HOME }}/services/platform-ui"
+    state: directory
+    mode: '0755'
+
+- name: Copy .env file
+  copy:
+    src: "templates/UI.env"
+    dest: "{{ ansible_env.HOME }}/services/platform-ui/.env"
+    mode: '0644'
+
+- name: Copy Dockerfile
+  copy:
+    src: "files/Dockerfile"
+    dest: "{{ ansible_env.HOME }}/services/platform-ui/Dockerfile"
+    mode: '0644'
+
+- name: Run uv setup 
+  command: uv run setup.py
+  args:
+    chdir: "{{ playbook_dir }}/.."
+  become: no
+
+- name: Build Docker image with secret using shell command
+  shell: |
+    cd "{{ ansible_env.HOME }}/services/platform-ui" && \
+    DOCKER_BUILDKIT=1 docker build \
+      --secret id=github_token,env=GITHUB_TOKEN \
+      -t hypothesis-ui:latest .
+  environment:
+    GITHUB_TOKEN: "{{ github_token }}"
+
+- name: Run UI container
+  community.docker.docker_container:
+    name: hypothesis-ui
+    image: hypothesis-ui:latest
+    state: started
+    restart_policy: unless-stopped
+    env_file: "{{ ansible_env.HOME }}/services/platform-ui/.env"
+    ports:
+      - "3009:3000"
+
+- name: Display deployment info
+  debug:
+    msg:
+      - "Hypothesis Generation UI deployed successfully!"
+      - "Access at: http://localhost:3009"
+      - "Container name: hypothesis-ui"
