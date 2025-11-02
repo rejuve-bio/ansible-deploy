@@ -21,23 +21,20 @@ services:
   auth-service:
     image: ${DOCKER_IMAGE_STAGING}
     container_name: auth-service-staging   
-    depends_on:
-      db:
-        condition: service_healthy
     command: >
       bash -c "
       sleep 5 &&
       flask db upgrade &&
-      flask run --host=0.0.0.0 --port=5002"
-     
-    ports:
-      - "${HOST_PORT}:5002"
-    env_file:
-      - .env
+      flask run --host=0.0.0.0 --port=5002 --debug"
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       - FLASK_APP=run.py
-      - FLASK_ENV=production
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}   
     restart: unless-stopped
 
 volumes:
