@@ -1,6 +1,9 @@
 services:
   assistant:
     image: ${ai_assistant_production}
+    volumes:
+      - .:/AI-Assistant:rw
+      - static:/static
     ports:
       - "${FLASK_HOST_PORT}:${FLASK_INTERNAL_PORT}"
     command: >
@@ -11,6 +14,7 @@ services:
     depends_on:
       - qdrant
       - redis
+      - mongodb
     environment:
       - .env
 
@@ -35,8 +39,10 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+    volumes:
+      - mongodb_data:/data/db
 
 volumes:
   vectordata:
-  static:
   mongodb_data:
+  static: 
