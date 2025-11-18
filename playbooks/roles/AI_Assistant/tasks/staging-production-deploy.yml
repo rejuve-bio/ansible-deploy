@@ -28,7 +28,7 @@
 
 - name: Clone AI-Assistant repository
   git:
-    repo: git@github.com:Abdu1964/AI-Assistant.git
+    repo: git@github.com:rejuve-bio/AI-Assistant.git
     dest: "{{ ansible_env.HOME }}/services/AI-Assistant"
     version: "{{ deployment_branch | default('staging') }}"
     update: yes     

@@ -28,7 +28,7 @@
 
 - name: Clone authentication-service repository
   git:
-    repo: git@github.com:Abdu1964/authentication-service.git
+    repo: git@github.com:rejuve-bio/authentication-service.git
     dest: "{{ ansible_env.HOME }}/services/authentication-service"
     version: "{{ deployment_branch | default('staging') }}"
     update: yes     

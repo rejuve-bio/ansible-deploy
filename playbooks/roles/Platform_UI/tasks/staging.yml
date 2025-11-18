@@ -15,7 +15,7 @@
 
 - name: Clone platform-ui repository
   git:
-    repo: git@github.com:Abdu1964/platform-ui.git
+    repo: git@github.com:rejuve-bio/platform-ui.git
     dest: "{{ ansible_env.HOME }}/services/platform-ui"
     version: "{{ deployment_branch | default('staging') }}"
     update: yes     
