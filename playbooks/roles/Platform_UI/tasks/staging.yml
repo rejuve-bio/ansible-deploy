@@ -13,6 +13,15 @@
     mode: '0755'
   ignore_errors: yes
 
+- name: Clone platform-ui repository
+  git:
+    repo: git@github.com:rejuve-bio/platform-ui.git
+    dest: "{{ ansible_env.HOME }}/services/platform-ui"
+    version: "{{ deployment_branch | default('staging') }}"
+    update: yes     
+    force: yes      
+  become: no
+
 - name: Pull prebuilt Docker image
   community.docker.docker_image:
     name: "{{ prebuilt_image }}"

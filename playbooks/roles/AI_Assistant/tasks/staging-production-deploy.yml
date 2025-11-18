@@ -16,7 +16,7 @@
   become: no
   ignore_errors: yes
 
-- name: Ensure AI Assistant directory exists
+- name: Ensure AI Assistant logfiles directory exists
   file:
     path: "{{ ansible_env.HOME }}/services/AI-Assistant/logfiles"
     state: directory
@@ -25,6 +25,15 @@
     group: "{{ ansible_user_id }}"
   become: no
   ignore_errors: yes
+
+- name: Clone AI-Assistant repository
+  git:
+    repo: git@github.com:rejuve-bio/AI-Assistant.git
+    dest: "{{ ansible_env.HOME }}/services/AI-Assistant"
+    version: "{{ deployment_branch | default('staging') }}"
+    update: yes     
+    force: yes      
+  become: no
 
 - name: Copy appropriate docker-compose file based on environment
   copy:

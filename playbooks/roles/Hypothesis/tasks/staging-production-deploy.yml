@@ -8,7 +8,7 @@
 
 - name: Ensure Hypothesis_generation directory exists
   file:
-    path: "{{ ansible_env.HOME }}/services/Hypothesis_generation"
+    path: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id }}"
@@ -16,10 +16,19 @@
   become: no
   ignore_errors: yes
 
+- name: Clone hypothesis-generation service repository
+  git:
+    repo: git@github.com:rejuve-bio/hypothesis-generation-demo.git
+    dest: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo"
+    version: "{{ deployment_branch | default('staging') }}"
+    update: yes     
+    force: yes      
+  become: no
+
 - name: Copy appropriate docker-compose file based on environment
   copy:
     src: "../templates/docker-compose.{{ Hypothesis_generation_environment | default('staging') }}.yml"
-    dest: "{{ ansible_env.HOME }}/services/Hypothesis_generation/docker-compose.yml"
+    dest: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo/docker-compose.yml"
     mode: '0644'
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
@@ -54,7 +63,7 @@
 
 - name: Pull latest Docker images
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/Hypothesis_generation && {{ docker_compose_command }} pull"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/hypothesis-generation-demo && {{ docker_compose_command }} pull"
   args:
     executable: /bin/bash
   register: compose_pull
@@ -65,7 +74,7 @@
 
 - name: Stop and remove existing containers
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/Hypothesis_generation && {{ docker_compose_command }} down"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/hypothesis-generation-demo && {{ docker_compose_command }} down"
   args:
     executable: /bin/bash
   ignore_errors: yes
@@ -80,11 +89,11 @@
     group: docker
   become: no
   loop:
-    - "{{ ansible_env.HOME }}/services/Hypothesis_generation/logfiles"
+    - "{{ ansible_env.HOME }}/services/hypothesis-generation-demo/logfiles"
 
 - name: Start containers with Docker images
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/Hypothesis_generation && {{ docker_compose_command }} up -d"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/hypothesis-generation-demo && {{ docker_compose_command }} up -d"
   args:
     executable: /bin/bash
   register: compose_up
@@ -95,7 +104,7 @@
 
 - name: Wait for services to be healthy
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/Hypothesis_generation && {{ docker_compose_command }} ps"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/hypothesis-generation-demo && {{ docker_compose_command }} ps"
   args:
     executable: /bin/bash
   register: compose_ps
