@@ -4,12 +4,6 @@ The Rejuve microservices platform implements a comprehensive DevOps architecture
 
 ![CI/CD-Pipeline-Architecture](images/cicd-pipeline-architecture.svg)
 
-## DevOps CI/CD Pipeline – Executive Summary
+## workflow -with-microservices
 
-The Rejuve DevOps pipeline delivers a fast, automated, and reliable process for building, testing, and deploying services across staging and production. The workflow begins when a developer forks the repository, creates a feature branch, and submits a Pull Request. Every PR triggers the Continuous Integration (CI) pipeline in GitHub Actions, which automatically runs lint checks, executes unit and integration tests, and builds a Docker image. Once validated, the CI system pushes a versioned image to Docker Hub, making it the official deployment artifact.
-
-A successful CI run triggers the Continuous Delivery (CD) pipeline, executed on a self-hosted GitHub Actions runner with direct access to target servers. The CD workflow pulls the new Docker image, applies environment-specific deployment configurations, restarts services using Docker Compose, and performs automated health checks. If validation fails, an automatic rollback restores the last stable version to maintain service availability.
-
-This CI/CD architecture provides controlled, repeatable deployments with minimal manual intervention, ensuring rapid delivery cycles, consistent environments, and a dependable promotion path from development to staging and production.
-
-![workflow-with-microservices](images/cicd-workflow.png)
+![alt text](images/workflow-with-microservices.png)
