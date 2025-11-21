@@ -1,0 +1,24 @@
+global:
+  smtp_smarthost: 'localhost:25'
+  smtp_from: 'alertmanager@your-domain.com'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'default-receiver'
+
+receivers:
+  - name: 'default-receiver'
+    # You can add email, slack, webhook configurations here
+    webhook_configs:
+      - url: 'http://localhost:5000/'
+        send_resolved: true
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
