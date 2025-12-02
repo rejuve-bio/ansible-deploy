@@ -150,7 +150,7 @@ Execute the playbook with:
 ```cd /ansible-deploy``` run from the root directory
 
 ```bash
-ansible-playbook-v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass
+ansible-playbook -v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass
 ```
 
 #### to deploy only the Custom Atomspace Builder
@@ -158,7 +158,7 @@ ansible-playbook-v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags 
 ```cd /ansible-deploy``` run from the root directory
 
 ```bash
-ansible-playbook-v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass
+ansible-playbook -v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass
 ```
 
 #### to deploy only the annotation
