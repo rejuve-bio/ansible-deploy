@@ -147,7 +147,7 @@ Execute the playbook with:
 
 #### to deploy only the UI
 
-```cd /ansible-deploy``` run from the root directory
+```cd /ansible-deploy```  
 
 ```bash
 ansible-playbook -v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass
@@ -155,7 +155,7 @@ ansible-playbook -v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags
 
 #### to deploy only the Custom Atomspace Builder
 
-```cd /ansible-deploy``` run from the root directory
+```cd /ansible-deploy``` 
 
 ```bash
 ansible-playbook -v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass
@@ -163,7 +163,7 @@ ansible-playbook -v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags
 
 #### to deploy only the annotation
 
-```cd /ansible-deploy``` run from the root directory
+```cd /ansible-deploy```  
 
 ```bash
 ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags annotation_Local --ask-become-pass
@@ -171,7 +171,7 @@ ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags 
 
 #### to deploy with MORK database
 
-```cd /ansible-deploy``` run from the root directory
+```cd /ansible-deploy```  
 
 ```bash 
 ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags MORK_Local --ask-become-pass
@@ -179,7 +179,7 @@ ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags 
 
 #### to deploy only AI_Assistant
 
-```cd /ansible-deploy``` run from the root directory
+```cd /ansible-deploy```  
 
 ```bash 
 ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags AI_Assistant_Local --ask-become-pass
@@ -187,7 +187,7 @@ ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags 
 
 #### to deploy only Hypothesis Generation
 
-```cd /ansible-deploy``` run from the root directory
+```cd /ansible-deploy```  
 
 ```bash 
 ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags hypothesis_Local --ask-become-pass
@@ -195,7 +195,7 @@ ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags 
 
 #### to deploy Annotation_UI,custom-atomspace-builder and the Generic Annotation with only Neo4j database
 
-```cd /ansible-deploy``` run from the root directory 
+```cd /ansible-deploy```  
 
 ```bash
 ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,local_network --ask-become-pass
@@ -203,8 +203,7 @@ ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml  --tags U
 
 #### to deploy Annotation_UI,custom-atomspace-builder and the Generic Annotation with MORK database
 
-```cd /ansible-deploy``` run from the root directory 
-
+```cd /ansible-deploy```  
 ```bash
 ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,MORK_Local,local_network --ask-become-pass
 ```
