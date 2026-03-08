@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "ansible-core==2.17.14",
     "jmespath==1.1.0",
-    "python-dotenv==1.0.1",
+    "python-dotenv==1.2.2",
     "pyyaml>=6.0.1",  # for YAML handling in Ansible
     "jinja2>=3.1.2",  # Template engine used by Ansible
     "requests>=2.31.0",  # For HTTP API calls in playbooks
