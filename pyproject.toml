@@ -5,7 +5,7 @@ description = "Ansible playbooks for deploying Rejuve services"
 requires-python = ">=3.10"
 dependencies = [
     "ansible-core==2.16.3",
-    "jmespath==1.0.1",
+    "jmespath==1.1.0",
     "python-dotenv==1.0.1",
     "pyyaml>=6.0.1",  # for YAML handling in Ansible
     "jinja2>=3.1.2",  # Template engine used by Ansible
