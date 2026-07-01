@@ -10,7 +10,7 @@ dependencies = [
     "pyyaml>=6.0.1",  # for YAML handling in Ansible
     "jinja2>=3.1.2",  # Template engine used by Ansible
     "requests>=2.31.0",  # For HTTP API calls in playbooks
-    "ansible-compat>=4.1.10",
+    "ansible-compat>=26.6.0",
     "packaging>=21.3",
     "resolvelib>=1.0.1",
 ]
