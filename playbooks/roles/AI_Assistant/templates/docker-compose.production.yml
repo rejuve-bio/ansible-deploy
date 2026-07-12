@@ -31,7 +31,7 @@ services:
     ports:
       - "${REDIS_HOST_PORT}:${REDIS_INTERNAL_PORT}"
   mongodb:
-    image: mongo:6.0
+    image: mongo:7.0
     restart: always
     ports:
       - "${MONGODB_HOST_PORT}:${MONGODB_INTERNAL_PORT}"
