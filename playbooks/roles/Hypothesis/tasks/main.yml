@@ -9,25 +9,25 @@
 
 - name: Ensure project directory exists
   file:
-    path: "{{ ansible_env.HOME }}/services/Hypothesis"
+    path: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
-  become: no  
+  become: no
 
 - name: Clone Hypothesis repository
   git:
     repo: https://github.com/rejuve-bio/hypothesis-generation-demo.git
-    dest: "{{ ansible_env.HOME }}/services/Hypothesis"
-    version: main
+    dest: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo"
+    version: staging
     force: yes
   become: no
 
 - name: Copy .env file
   template:
     src: ../templates/.env
-    dest: "{{ ansible_env.HOME }}/services/Hypothesis/.env"
+    dest: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo/.env"
     mode: '0640'
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
@@ -66,9 +66,20 @@
       when: docker_compose_command == ''
       become: no
 
+- name: Pull staging images
+  shell: |
+    sg docker -c "cd {{ ansible_env.HOME }}/services/hypothesis-generation-demo && {{ docker_compose_command }} pull"
+  args:
+    executable: /bin/bash
+  register: compose_pull
+  retries: 2
+  delay: 10
+  until: compose_pull.rc == 0
+  become: no
+
 - name: Build and start containers
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/Hypothesis && {{ docker_compose_command }} up --build -d"
+    sg docker -c "cd {{ ansible_env.HOME }}/services/hypothesis-generation-demo && {{ docker_compose_command }} up --build -d"
   args:
     executable: /bin/bash
   register: compose_up
