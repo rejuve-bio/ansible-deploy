@@ -1,47 +1,41 @@
 ---
 # AI-Assistant Service
 - name: Check prerequisites
-  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  command: "python3 {{ playbook_dir }}/prerequisite_check_local.py"
   register: prerequisites_check
   failed_when: prerequisites_check.rc != 0
   changed_when: false
   become: no
 
-- name: Gather installed packages facts
-  ansible.builtin.package_facts:
-    manager: auto
-  become: no
+- name: Set AI Assistant directory
+  set_fact:
+    ai_assistant_dir: "{{ local_base_dir }}/AI-Assistant"
 
 - name: Create project directory
   file:
-    path: "{{ ansible_env.HOME }}/services/AI-Assistant"
+    path: "{{ ai_assistant_dir }}"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
   become: no
 
-- name: Clone the AI_Assistant repository
-  git:
-    repo: https://github.com/rejuve-bio/AI-Assistant.git
-    dest: "{{ ansible_env.HOME }}/services/AI-Assistant"
-    version: main
-    force: yes
-  become: no
-
-- name: Copy pre-configured .env file to remote
+- name: Copy docker-compose.yml
   copy:
-    src: templates/ai-assistant.env
-    dest: "{{ ansible_env.HOME }}/services/AI-Assistant/.env"
-    mode: '0640'
+    src: "files/docker-compose.local.yml"
+    dest: "{{ ai_assistant_dir }}/docker-compose.yml"
+    mode: '0644'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
   become: no
 
-- name: Run uv setup 
-  command: uv run setup.py
-  args:
-    chdir: "{{ playbook_dir }}/.."
+- name: Copy .env file
+  template:
+    src: templates/ai-assistant.env
+    dest: "{{ ai_assistant_dir }}/.env"
+    mode: '0640'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
   become: no
 
 # Docker Compose command detection
@@ -72,19 +66,35 @@
       when: docker_compose_command == ''
       become: no
 
-- name: Clean up existing containers
+- name: Ensure shared local docker network exists
+  community.docker.docker_network:
+    name: "{{ local_docker_network }}"
+    state: present
+    ipam_config:
+      - subnet: 10.99.0.0/24
+
+- name: Clean up existing AI Assistant containers
   shell: |
-    sg docker -c "{{ docker_compose_command }} -f {{ ansible_env.HOME }}/services/AI-Assistant/docker-compose.yml down -v"
+    sg docker -c "cd {{ ai_assistant_dir }} && {{ docker_compose_command }} -p ai-assistant-local down -v --remove-orphans || true"
   args:
     executable: /bin/bash
   ignore_errors: yes
-  register: cleanup
-  changed_when: "'Stopping' in cleanup.stdout"
   become: no
 
-- name: Build and start containers
+- name: Pull AI Assistant images
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/AI-Assistant && {{ docker_compose_command }} up --build -d"
+    sg docker -c "cd {{ ai_assistant_dir }} && {{ docker_compose_command }} -p ai-assistant-local pull"
+  args:
+    executable: /bin/bash
+  register: compose_pull
+  retries: 2
+  delay: 10
+  until: compose_pull.rc == 0
+  become: no
+
+- name: Start AI Assistant services
+  shell: |
+    sg docker -c "cd {{ ai_assistant_dir }} && {{ docker_compose_command }} -p ai-assistant-local up -d"
   args:
     executable: /bin/bash
   register: compose_up
@@ -93,25 +103,50 @@
   until: compose_up.rc == 0
   become: no
 
+- name: Wait for services to start
+  pause:
+    seconds: 10
+  become: no
+
 - name: Check AI Assistant main service container status
-  docker_container_info:
-    name: ai-assistant-assistant-1
+  community.docker.docker_container_info:
+    name: ai-assistant-local
   register: ai_assistant_service
   ignore_errors: yes
   become: no
 
 - name: Check Qdrant container status
-  docker_container_info:
-    name: ai-assistant-qdrant-1
+  community.docker.docker_container_info:
+    name: ai-assistant-qdrant-local
   register: qdrant_service
   ignore_errors: yes
   become: no
 
 - name: Check Redis container status
-  docker_container_info:
-    name: ai-assistant-redis-1
+  community.docker.docker_container_info:
+    name: ai-assistant-redis-local
   register: redis_service
   ignore_errors: yes
+  become: no
+
+- name: Check MongoDB container status
+  community.docker.docker_container_info:
+    name: ai-assistant-mongodb-local
+  register: mongodb_service
+  ignore_errors: yes
+  become: no
+
+- name: Get AI Assistant logs if not running
+  command: "docker logs ai-assistant-local --tail 50"
+  register: ai_assistant_logs
+  changed_when: false
+  when: ai_assistant_service.container is not defined or ai_assistant_service.container.State.Status != 'running'
+  become: no
+
+- name: Display AI Assistant logs if deployment failed
+  debug:
+    var: ai_assistant_logs.stdout_lines
+  when: ai_assistant_service.container is not defined or ai_assistant_service.container.State.Status != 'running'
   become: no
 
 - name: Print AI Assistant deployment status
@@ -119,21 +154,27 @@
     msg: |
       {% if ai_assistant_service.container is defined and ai_assistant_service.container.State.Status == "running" and
             qdrant_service.container is defined and qdrant_service.container.State.Status == "running" and
-            redis_service.container is defined and redis_service.container.State.Status == "running" %}
-      ✅ AI Assistant service deployed successfully and running:
-        - ai-assistant-assistant-1: http://localhost:5002
-        - ai-assistant-qdrant-1: http://localhost:6333 (Dashboard), http://localhost:6334 (API)
-        - ai-assistant-redis-1: redis://localhost:6378
+            redis_service.container is defined and redis_service.container.State.Status == "running" and
+            mongodb_service.container is defined and mongodb_service.container.State.Status == "running" %}
+      [OK] AI Assistant service deployed successfully and running:
+        - ai-assistant-local: http://localhost:{{ ai_assistant_flask_port }}
+        - ai-assistant-qdrant-local: http://localhost:{{ ai_assistant_qdrant_port }} (REST), {{ ai_assistant_qdrant_grpc_port }} (gRPC)
+        - ai-assistant-redis-local: redis://localhost:{{ ai_assistant_redis_port }}
+        - ai-assistant-mongodb-local: mongodb://localhost:{{ ai_assistant_mongo_port }}
       {% else %}
-      ❌ Deployment incomplete: Some AI Assistant services are down.
+      [FAIL] Deployment incomplete: Some AI Assistant services are down.
         {% if ai_assistant_service.container is not defined or ai_assistant_service.container.State.Status != "running" %}
-        - ai-assistant-assistant-1 is DOWN. Start with: {{ docker_compose_command }} up -d ai-assistant-assistant-1
+        - ai-assistant-local is DOWN.
         {% endif %}
         {% if qdrant_service.container is not defined or qdrant_service.container.State.Status != "running" %}
-        - ai-assistant-qdrant-1 is DOWN. Start with: {{ docker_compose_command }} up -d ai-assistant-qdrant-1
+        - ai-assistant-qdrant-local is DOWN.
         {% endif %}
         {% if redis_service.container is not defined or redis_service.container.State.Status != "running" %}
-        - ai-assistant-redis-1 is DOWN. Start with: {{ docker_compose_command }} up -d ai-assistant-redis-1
+        - ai-assistant-redis-local is DOWN.
         {% endif %}
+        {% if mongodb_service.container is not defined or mongodb_service.container.State.Status != "running" %}
+        - ai-assistant-mongodb-local is DOWN.
+        {% endif %}
+        - Check logs: cd {{ ai_assistant_dir }} && {{ docker_compose_command }} -p ai-assistant-local logs
       {% endif %}
   become: no
