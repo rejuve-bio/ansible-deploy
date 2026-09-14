@@ -1,0 +1,153 @@
+---
+- name: Check prerequisites
+  command: "python3 {{ playbook_dir }}/prerequisite_check_local.py"
+  register: prerequisites_check
+  failed_when: prerequisites_check.rc != 0
+  changed_when: false
+  become: no
+
+- name: Set annotation service directory
+  set_fact:
+    annotation_dir: "{{ local_base_dir }}/annotation-query-backend"
+
+- name: Create project directory
+  file:
+    path: "{{ annotation_dir }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  become: no
+
+- name: Create required data directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  with_items:
+    - "{{ annotation_dir }}/metta_data"
+    - "{{ annotation_dir }}/cypher_data"
+  become: no
+
+- name: Copy docker-compose.yml
+  copy:
+    src: "files/docker-compose.local.yml"
+    dest: "{{ annotation_dir }}/docker-compose.yml"
+    mode: '0644'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  become: no
+
+- name: Copy .env file
+  template:
+    src: templates/env.j2
+    dest: "{{ annotation_dir }}/.env"
+    mode: '0640'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  become: no
+
+# Docker Compose command detection
+- name: Check for available Docker Compose command
+  block:
+    - name: Check if docker compose v2 is available
+      command: docker compose version
+      register: docker_compose_v2_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Check if docker-compose v1 is available
+      command: which docker-compose
+      register: docker_compose_v1_check
+      ignore_errors: yes
+      changed_when: false
+      become: no
+
+    - name: Set compose command fact
+      set_fact:
+        docker_compose_command: "{{ 'docker compose' if docker_compose_v2_check.rc == 0 else 'docker-compose' if docker_compose_v1_check.rc == 0 else '' }}"
+      become: no
+
+    - name: Fail if no Docker Compose found
+      fail:
+        msg: "No Docker Compose command found. Please install either docker-compose v1 or docker compose v2."
+      when: docker_compose_command == ''
+      become: no
+
+- name: Ensure shared local docker network exists
+  community.docker.docker_network:
+    name: "{{ local_docker_network }}"
+    state: present
+    ipam_config:
+      - subnet: 10.99.0.0/24
+
+- name: Clean up existing annotation containers
+  shell: |
+    sg docker -c "cd {{ annotation_dir }} && {{ docker_compose_command }} -p annotation-local down -v --remove-orphans || true"
+  args:
+    executable: /bin/bash
+  ignore_errors: yes
+  become: no
+
+- name: Pull annotation service images
+  shell: |
+    sg docker -c "cd {{ annotation_dir }} && {{ docker_compose_command }} -p annotation-local pull"
+  args:
+    executable: /bin/bash
+  register: compose_pull
+  retries: 2
+  delay: 10
+  until: compose_pull.rc == 0
+  become: no
+
+- name: Start annotation service
+  shell: |
+    sg docker -c "cd {{ annotation_dir }} && {{ docker_compose_command }} -p annotation-local up -d"
+  args:
+    executable: /bin/bash
+  register: compose_up
+  retries: 2
+  delay: 10
+  until: compose_up.rc == 0
+  become: no
+
+- name: Wait for services to start
+  pause:
+    seconds: 10
+  become: no
+
+- name: Check annotation service container status
+  community.docker.docker_container_info:
+    name: annotation-service-local
+  register: annotation_service_info
+  become: no
+
+- name: Get annotation service logs if not running
+  command: "docker logs annotation-service-local --tail 50"
+  register: annotation_service_logs
+  changed_when: false
+  when: annotation_service_info.container.State.Status != 'running'
+  become: no
+
+- name: Display annotation service logs if deployment failed
+  debug:
+    var: annotation_service_logs.stdout_lines
+  when: annotation_service_info.container.State.Status != 'running'
+  become: no
+
+- name: Print Annotation deployment status
+  debug:
+    msg: |
+      {% if annotation_service_info.container.State.Status == "running" %}
+      [OK] Annotation service deployed successfully and running:
+        - API: http://localhost:{{ annotation_app_port }}
+        - Meilisearch: http://localhost:{{ annotation_meili_port }}
+      {% else %}
+      [FAIL] Deployment incomplete: annotation service is down.
+        - Status: {{ annotation_service_info.container.State.Status }}
+        - Check logs: cd {{ annotation_dir }} && {{ docker_compose_command }} -p annotation-local logs
+      {% endif %}
+  become: no
