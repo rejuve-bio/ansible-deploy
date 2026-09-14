@@ -1,0 +1,63 @@
+services:
+  assistant:
+    image: "${AI_ASSISTANT_IMAGE}"
+    container_name: ai-assistant-local
+    volumes:
+      - logfiles:/AI-Assistant/logfiles
+      - static:/static
+      - hf_cache:/root/.cache/huggingface
+    ports:
+      - "127.0.0.1:${FLASK_PORT}:${FLASK_PORT}"
+    # No --preload: causes "can only join a child process" crashes.
+    command: gunicorn -w 4 --bind 0.0.0.0:$FLASK_PORT --timeout 600 --log-level debug run:app
+    restart: always
+    depends_on:
+      - qdrant
+      - redis
+      - mongodb
+    env_file:
+      - .env
+    # reach neo4j-atomspace, published on the host, not this network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: ai-assistant-qdrant-local
+    ports:
+      - "127.0.0.1:${QDRANT_PORT}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT}:6334"
+    volumes:
+      - vectordata:/qdrant/storage
+
+  redis:
+    image: redis:6-alpine
+    container_name: ai-assistant-redis-local
+    restart: always
+    ports:
+      - "127.0.0.1:${REDIS_PORT_HOST}:6379"
+
+  mongodb:
+    image: mongo:6.0
+    container_name: ai-assistant-mongodb-local
+    restart: always
+    ports:
+      - "127.0.0.1:${MONGO_PORT_HOST}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+    volumes:
+      - mongodb_data:/data/db
+
+volumes:
+  vectordata:
+  static:
+  mongodb_data:
+  hf_cache:
+  logfiles:
+
+networks:
+  default:
+    name: rejuve-services-net
+    external: true

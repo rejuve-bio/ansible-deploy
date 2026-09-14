@@ -1,0 +1,304 @@
+version: '3.8'
+
+# Prebuilt images only, no repo clone. Ports on 127.0.0.1.
+
+services:
+
+  mongo:
+    image: mongo:latest
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  prolog-service:
+    image: ${PROLOG_IMAGE}
+    ports:
+      - "127.0.0.1:${PROLOG_PORT_HOST}:4242"
+    volumes:
+      - ${PROLOG_OUT_V2_PATH}:/mnt/prolog_out_v2
+      - ${PROLOG_OUT_V3_PATH}:/mnt/prolog_out_v3
+    restart: unless-stopped
+
+  dask-scheduler:
+    image: ${DASK_SCHEDULER_IMAGE}
+    hostname: dask-scheduler
+    # bypass buggy default entrypoint (ignores SKIP_SEED)
+    entrypoint: []
+    command: ["dask", "scheduler", "--host", "0.0.0.0", "--port", "8786", "--dashboard-address", ":8787"]
+    ports:
+      - "127.0.0.1:${DASK_SCHEDULER_PORT_HOST}:8786"
+      - "127.0.0.1:${DASK_DASHBOARD_PORT_HOST}:8787"
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - SKIP_SEED=true
+    healthcheck:
+      test: ["CMD", "python", "-c", "from dask.distributed import Client; c = Client('tcp://127.0.0.1:8786', connection_limit=1, timeout='5s'); c.close()"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  dask-worker:
+    image: ${DASK_WORKER_IMAGE}
+    env_file:
+      - .env
+    environment:
+      - DASK_ADDRESS=tcp://dask-scheduler:8786
+      - PREFECT_API_URL=http://prefect-service:4200/api
+      - PYTHONPATH=/app
+      - SWIPL_HOST=prolog-service
+      - SWIPL_PORT=4242
+      - SKIP_SEED=true
+      - REDIS_URL=redis://hypothesis-local-redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CREDIBLE_SETS_DB_HOST=credible-sets-postgres
+      - CREDIBLE_SETS_DB_PORT=5432
+      - CREDIBLE_SETS_DB_NAME=${CREDIBLE_SETS_DB_NAME}
+      - CREDIBLE_SETS_DB_USER=${CREDIBLE_SETS_DB_USER}
+      - CREDIBLE_SETS_DB_PASSWORD=${CREDIBLE_SETS_DB_PASSWORD}
+    depends_on:
+      dask-scheduler:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      prolog-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      credible-sets-postgres:
+        condition: service_healthy
+    # bypass buggy default entrypoint (ignores SKIP_SEED)
+    entrypoint: []
+    command: >
+      dask worker tcp://dask-scheduler:8786
+      --nworkers 4
+      --nthreads 1
+      --memory-limit 40GB
+      --preload src.dask_preload
+    deploy:
+      resources:
+        limits:
+          cpus: '64.0'
+          memory: 180G
+    restart: unless-stopped
+
+  api-service:
+    image: ${API_IMAGE}
+    ports:
+      - "127.0.0.1:${API_PORT_HOST}:5000"
+    volumes:
+      # Bundled manifest parsers (public data), missing from this image.
+      - ./scripts:/app/scripts:ro
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=development
+      - PREFECT_API_URL=http://prefect-service:4200/api
+      - PYTHONPATH=/app
+      - DASK_ADDRESS=tcp://dask-scheduler:8786
+      - SWIPL_HOST=prolog-service
+      - SWIPL_PORT=4242
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - REDIS_URL=redis://hypothesis-local-redis:6379
+    depends_on:
+      mongo:
+        condition: service_healthy
+      prefect-service:
+        condition: service_healthy
+      dask-scheduler:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # bypass buggy default entrypoint (ignores SKIP_SEED)
+    entrypoint: []
+    command: >
+      gunicorn "src.server:create_app_with_config"
+      --workers 4
+      --worker-class uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:5000
+      --timeout 600
+      --graceful-timeout 30
+      --keep-alive 5
+      --access-logfile -
+      --error-logfile -
+    restart: unless-stopped
+
+  prefect-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${PREFECT_DB_USER}
+      POSTGRES_PASSWORD: ${PREFECT_DB_PASSWORD}
+      POSTGRES_DB: ${PREFECT_DB_NAME}
+    ports:
+      - "127.0.0.1:${PREFECT_DB_PORT_HOST}:5432"
+    volumes:
+      - prefect-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PREFECT_DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  credible-sets-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${CREDIBLE_SETS_DB_USER}
+      POSTGRES_PASSWORD: ${CREDIBLE_SETS_DB_PASSWORD}
+      POSTGRES_DB: ${CREDIBLE_SETS_DB_NAME}
+    ports:
+      - "127.0.0.1:${CREDIBLE_SETS_DB_PORT_HOST}:5432"
+    volumes:
+      - credible-sets-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CREDIBLE_SETS_DB_USER} -d ${CREDIBLE_SETS_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # One-off loaders: bundled scripts, public data (EBI FTP), no repo access.
+  credible-sets-loader:
+    profiles: ["tools"]
+    image: python:3.11-slim
+    environment:
+      - CREDIBLE_SETS_DB_HOST=credible-sets-postgres
+      - CREDIBLE_SETS_DB_PORT=5432
+      - CREDIBLE_SETS_DB_NAME=${CREDIBLE_SETS_DB_NAME}
+      - CREDIBLE_SETS_DB_USER=${CREDIBLE_SETS_DB_USER}
+      - CREDIBLE_SETS_DB_PASSWORD=${CREDIBLE_SETS_DB_PASSWORD}
+    volumes:
+      - ./scripts:/scripts:ro
+    depends_on:
+      credible-sets-postgres:
+        condition: service_healthy
+    command: >
+      sh -c "pip install --quiet psycopg2-binary pyarrow numpy &&
+      python /scripts/load_credible_sets_to_postgres.py --release latest"
+    restart: "no"
+
+  opentargets-studies-loader:
+    profiles: ["tools"]
+    image: python:3.11-slim
+    environment:
+      - CREDIBLE_SETS_DB_HOST=credible-sets-postgres
+      - CREDIBLE_SETS_DB_PORT=5432
+      - CREDIBLE_SETS_DB_NAME=${CREDIBLE_SETS_DB_NAME}
+      - CREDIBLE_SETS_DB_USER=${CREDIBLE_SETS_DB_USER}
+      - CREDIBLE_SETS_DB_PASSWORD=${CREDIBLE_SETS_DB_PASSWORD}
+    volumes:
+      - ./scripts:/scripts:ro
+    depends_on:
+      credible-sets-postgres:
+        condition: service_healthy
+    command: >
+      sh -c "pip install --quiet psycopg2-binary pyarrow numpy &&
+      python /scripts/load_opentargets_studies.py --release latest"
+    restart: "no"
+
+  prefect-service:
+    image: ${PREFECT_SERVICE_IMAGE}
+    ports:
+      - "127.0.0.1:${PREFECT_UI_PORT_HOST}:4200"
+    volumes:
+      - prefect-data:/root/.prefect
+    env_file:
+      - .env
+    environment:
+      - PREFECT_API_URL=http://prefect-service:4200/api
+      # local port, not the upstream staging domain
+      - PREFECT_UI_API_URL=http://localhost:${PREFECT_UI_PORT_HOST}/api
+      - DASK_ADDRESS=tcp://dask-scheduler:8786
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://${PREFECT_DB_USER}:${PREFECT_DB_PASSWORD}@prefect-postgres:5432/${PREFECT_DB_NAME}
+    depends_on:
+      prefect-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 20
+      start_period: 300s
+    restart: unless-stopped
+
+  prefect-deployment:
+    image: ${PREFECT_DEPLOYMENT_IMAGE}
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+    env_file:
+      - .env
+    environment:
+      - PREFECT_API_URL=http://prefect-service:4200/api
+      - DASK_ADDRESS=tcp://dask-scheduler:8786
+      - PYTHONPATH=/app
+      - REDIS_URL=redis://hypothesis-local-redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SWIPL_HOST=prolog-service
+      - SWIPL_PORT=4242
+      - CREDIBLE_SETS_DB_HOST=credible-sets-postgres
+      - CREDIBLE_SETS_DB_PORT=5432
+      - CREDIBLE_SETS_DB_NAME=${CREDIBLE_SETS_DB_NAME}
+      - CREDIBLE_SETS_DB_USER=${CREDIBLE_SETS_DB_USER}
+      - CREDIBLE_SETS_DB_PASSWORD=${CREDIBLE_SETS_DB_PASSWORD}
+    depends_on:
+      prefect-service:
+        condition: service_healthy
+      dask-scheduler:
+        condition: service_started
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      credible-sets-postgres:
+        condition: service_healthy
+    # bypass buggy default entrypoint (ignores SKIP_SEED)
+    entrypoint: []
+    command: >
+      bash -c "
+      prefect work-pool create 'analysis-pool' --type process --overwrite &&
+      prefect work-pool update 'analysis-pool' --concurrency-limit 3 &&
+      prefect work-pool create 'interactive-pool' --type process --overwrite &&
+      prefect work-pool update 'interactive-pool' --concurrency-limit 10 &&
+      prefect concurrency-limit create harmonize_tag 2 || true &&
+      python src/deployments.py --swipl-host prolog-service --swipl-port 4242 &&
+      prefect worker start --pool 'analysis-pool' --name 'heavy-worker' &
+      prefect worker start --pool 'interactive-pool' --name 'light-worker' &
+      tail -f /dev/null
+      "
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: hypothesis-local-redis
+    ports:
+      - "127.0.0.1:${REDIS_PORT_HOST}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  prefect-data:
+  prefect-postgres-data:
+  credible-sets-postgres-data:
+
+networks:
+  default:
+    name: rejuve-services-net
+    external: true

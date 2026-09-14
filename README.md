@@ -32,7 +32,7 @@ An infrastructure automation project for deploying Rejuve Bio’s core services 
 ```bash
 sudo apt update
 sudo apt upgrade -y
-udo apt install ansible
+sudo apt install ansible
 sudo usermod -aG docker $USER
 ansible-galaxy collection install community.docker
 sudo apt install make
@@ -48,7 +48,7 @@ If you are working on an existing server or computer (i.e., not a fresh install)
 sudo apt update
 sudo apt upgrade -y
 ```
-# Directory Stracture
+# Directory Structure
 ```
 ansible-deploy/
 
@@ -127,89 +127,30 @@ Replace these placeholders:
 - `~/.ssh/id_rsa` – Path to your private key
 
 
-### 4. Configure Environment Files
+### 4. Local Deployment
 
-#### For Custom Atomspace Builder:Edit only the following lines in:
-#### playbooks/roles/Custom_Atomspace_builder/templates/custom-atomspace-builder.env
-```bash
-LLM_PROVIDER="openai" or "gemini" 
-LLM_API_KEY="your_api_key_here"
-```
-#### For Annotation Service:Edit only the following lines in:
-#### playbooks/roles/Annotation/templates/.env
-```bash
-LLM_MODEL="openai" or gemini
-OPENAI_API_KEY="your_LLM_API_KEY_here"
-```
-### 5. Run the Deployment (for Local Deployment)
+Want to run the 5 core services (Platform UI, Authentication Service,
+Annotation, Hypothesis Generation, AI Assistant) on your own machine? See
+**[LOCAL_DEPLOYMENT.md](LOCAL_DEPLOYMENT.md)** for the full step-by-step guide -
+no GitHub credentials needed, everything runs from public prebuilt images.
 
-Execute the playbook with:
-
-#### to deploy only the UI
-
-```cd /ansible-deploy```  
+A few other local roles exist outside that guide (UI, Custom Atomspace
+Builder, MORK) - these still need `sudo`/`--ask-become-pass`:
 
 ```bash
-ansible-playbook -v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags UI_Local --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml --tags UI_Local --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml --tags Custom_Atomspace_builder_Local --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml --tags MORK_Local --ask-become-pass
 ```
 
-#### to deploy only the Custom Atomspace Builder
-
-```cd /ansible-deploy``` 
+Or combined:
 
 ```bash
-ansible-playbook -v  -i inventory/hosts.ini playbooks/deploy_server.yml   --tags Custom_Atomspace_builder_Local --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,local_network --ask-become-pass
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,MORK_Local,local_network --ask-become-pass
 ```
 
-#### to deploy only the annotation
-
-```cd /ansible-deploy```  
-
-```bash
-ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags annotation_Local --ask-become-pass
-```
-
-#### to deploy with MORK database
-
-```cd /ansible-deploy```  
-
-```bash 
-ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags MORK_Local --ask-become-pass
-```
-
-#### to deploy only AI_Assistant
-
-```cd /ansible-deploy```  
-
-```bash 
-ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags AI_Assistant_Local --ask-become-pass
-```
-
-#### to deploy only Hypothesis Generation
-
-```cd /ansible-deploy```  
-
-```bash 
-ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml   --tags hypothesis_Local --ask-become-pass
-```
-
-#### to deploy Annotation_UI,custom-atomspace-builder and the Generic Annotation with only Neo4j database
-
-```cd /ansible-deploy```  
-
-```bash
-ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,local_network --ask-become-pass
-```
-
-#### to deploy Annotation_UI,custom-atomspace-builder and the Generic Annotation with MORK database
-
-```cd /ansible-deploy```  
-```bash
-ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml  --tags UI_Local,annotation_Local,Custom_Atomspace_builder_Local,MORK_Local,local_network --ask-become-pass
-```
-Enter your sudo password when prompted.
-
-#### to deploy on Remote server
+### 5. Deploy to a Remote Server
 
 ```update  hosts.ini```
 

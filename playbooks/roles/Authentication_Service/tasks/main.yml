@@ -1,6 +1,6 @@
 ---
 - name: Check prerequisites
-  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  command: "python3 {{ playbook_dir }}/prerequisite_check_local.py"
   register: prerequisites_check
   failed_when: prerequisites_check.rc != 0
   changed_when: false
@@ -11,27 +11,44 @@
     manager: auto
   become: no
 
+- name: Set authentication service directory
+  set_fact:
+    auth_dir: "{{ local_base_dir }}/authentication-service"
+
 - name: Create authentication service directory
   file:
-    path: "{{ ansible_env.HOME }}/services/authentication-service"
+    path: "{{ auth_dir }}"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
   become: no
 
-- name: Clone authentication service repository
-  git:
-    repo: "https://github.com/rejuve-bio/authentication-service.git"
-    dest: "{{ ansible_env.HOME }}/services/authentication-service"
-    version: main
-    force: yes
+- name: Copy docker-compose.yml
+  copy:
+    src: "files/docker-compose.local.yml"
+    dest: "{{ auth_dir }}/docker-compose.yml"
+    mode: '0644'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
   become: no
 
 - name: Copy .env file
-  copy:
+  template:
     src: "templates/.env"
-    dest: "{{ ansible_env.HOME }}/services/authentication-service/.env"
+    dest: "{{ auth_dir }}/.env"
+    mode: '0644'
+    owner: "{{ ansible_user_id | default(ansible_user) }}"
+    group: "{{ ansible_user_id | default(ansible_user) }}"
+  become: no
+
+# Stopgap for the galaxy_user UnboundLocalError on login when GALAXY_URL is
+# unset (our local deployments don't configure Galaxy). Remove once the fix
+# is merged upstream and rebuilt into the image.
+- name: Copy login bugfix patch
+  copy:
+    src: "files/patches/"
+    dest: "{{ auth_dir }}/patches/"
     mode: '0644'
     owner: "{{ ansible_user_id | default(ansible_user) }}"
     group: "{{ ansible_user_id | default(ansible_user) }}"
@@ -65,17 +82,35 @@
       when: docker_compose_command == ''
       become: no
 
+- name: Ensure shared local docker network exists
+  community.docker.docker_network:
+    name: "{{ local_docker_network }}"
+    state: present
+    ipam_config:
+      - subnet: 10.99.0.0/24
+
 - name: Clean up existing authentication service containers
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/authentication-service && {{ docker_compose_command }} down -v --remove-orphans || true"
+    sg docker -c "cd {{ auth_dir }} && {{ docker_compose_command }} -p auth-local down -v --remove-orphans || true"
   args:
     executable: /bin/bash
   ignore_errors: yes
   become: no
 
-- name: Build and start authentication service 
+- name: Pull authentication service images
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/authentication-service && {{ docker_compose_command }} up --build -d"
+    sg docker -c "cd {{ auth_dir }} && {{ docker_compose_command }} -p auth-local pull"
+  args:
+    executable: /bin/bash
+  register: compose_pull
+  retries: 2
+  delay: 10
+  until: compose_pull.rc == 0
+  become: no
+
+- name: Start authentication service
+  shell: |
+    sg docker -c "cd {{ auth_dir }} && {{ docker_compose_command }} -p auth-local up -d"
   args:
     executable: /bin/bash
   become: no
@@ -88,20 +123,20 @@
 
 - name: Check web container status
   shell: |
-    sg docker -c "docker inspect -f '{{ '{{.State.Status}}' }}' authentication-service-web-1 2>/dev/null || echo 'not-found'"
+    sg docker -c "docker inspect -f '{{ '{{.State.Status}}' }}' auth-service-local 2>/dev/null || echo 'not-found'"
   register: web_container_status
   become: no
 
 - name: Check database container status
   shell: |
-    sg docker -c "docker inspect -f '{{ '{{.State.Status}}' }}' authentication-service-db-1 2>/dev/null || echo 'not-found'"
+    sg docker -c "docker inspect -f '{{ '{{.State.Status}}' }}' auth-db-local 2>/dev/null || echo 'not-found'"
   register: db_container_status
   become: no
 
 - name: Start web container if created but not running
   shell: |
-    sg docker -c "docker start authentication-service-web-1"
-  when: 
+    sg docker -c "docker start auth-service-local"
+  when:
     - web_container_status.stdout != 'not-found'
     - web_container_status.stdout != 'running'
   become: no
@@ -109,8 +144,8 @@
 
 - name: Start database container if created but not running
   shell: |
-    sg docker -c "docker start authentication-service-db-1"
-  when: 
+    sg docker -c "docker start auth-db-local"
+  when:
     - db_container_status.stdout != 'not-found'
     - db_container_status.stdout != 'running'
   become: no
@@ -118,26 +153,26 @@
 - name: Wait after starting containers
   pause:
     seconds: 10
-  when: 
-    - (web_container_status.stdout != 'not-found' and web_container_status.stdout != 'running') or 
+  when:
+    - (web_container_status.stdout != 'not-found' and web_container_status.stdout != 'running') or
       (db_container_status.stdout != 'not-found' and db_container_status.stdout != 'running')
   become: no
 
 - name: Check final web container status
   shell: |
-    sg docker -c "docker inspect -f '{{ '{{.State.Status}}' }}' authentication-service-web-1 2>/dev/null || echo 'not-found'"
+    sg docker -c "docker inspect -f '{{ '{{.State.Status}}' }}' auth-service-local 2>/dev/null || echo 'not-found'"
   register: final_web_status
   become: no
 
 - name: Check final database container status
   shell: |
-    sg docker -c "docker inspect -f '{{ '{{.State.Status}}' }}' authentication-service-db-1 2>/dev/null || echo 'not-found'"
+    sg docker -c "docker inspect -f '{{ '{{.State.Status}}' }}' auth-db-local 2>/dev/null || echo 'not-found'"
   register: final_db_status
   become: no
 
 - name: Get web container logs for debugging
   shell: |
-    sg docker -c "docker logs authentication-service-web-1 --tail 20 2>/dev/null || echo 'Container not available for logs'"
+    sg docker -c "docker logs auth-service-local --tail 20 2>/dev/null || echo 'Container not available for logs'"
   register: web_container_logs
   when: final_web_status.stdout != 'not-found'
   become: no
@@ -146,25 +181,25 @@
   debug:
     msg: |
       {% if final_web_status.stdout == 'running' and final_db_status.stdout == 'running' %}
-      ✅ Authentication Service deployed successfully and running:
-        - Web service: uthentication-service-web-1
-        - PostgreSQL database: running (authentication-service-db-1)
-        - Use 'cd {{ ansible_env.HOME }}/services/authentication-service && {{ docker_compose_command }} down' to stop services
+      [OK] Authentication Service deployed successfully and running:
+        - Web service: running (auth-service-local)
+        - PostgreSQL database: running (auth-db-local)
+        - Use 'cd {{ auth_dir }} && {{ docker_compose_command }} -p auth-local down' to stop services
       {% else %}
-      ❌ Deployment incomplete: Some services are not running properly.
+      [FAIL] Deployment incomplete: Some services are not running properly.
         - Web container status: {{ final_web_status.stdout }}
         - Database container status: {{ final_db_status.stdout }}
         {% if final_web_status.stdout != 'not-found' and final_web_status.stdout != 'running' %}
         - Web container logs: {{ web_container_logs.stdout_lines | join('\n') }}
         {% endif %}
-        - Check detailed logs: cd {{ ansible_env.HOME }}/services/authentication-service && {{ docker_compose_command }} logs
-        - Try manual start: docker start authentication-service-web-1 authentication-service-db-1
+        - Check detailed logs: cd {{ auth_dir }} && {{ docker_compose_command }} -p auth-local logs
+        - Try manual start: docker start auth-service-local auth-db-local
       {% endif %}
   become: no
 
 - name: Display full service logs if deployment failed
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/authentication-service && {{ docker_compose_command }} logs --tail 30"
+    sg docker -c "cd {{ auth_dir }} && {{ docker_compose_command }} -p auth-local logs --tail 30"
   register: full_service_logs
   when: final_web_status.stdout != 'running' or final_db_status.stdout != 'running'
   changed_when: false
@@ -176,4 +211,3 @@
     var: full_service_logs.stdout_lines
   when: final_web_status.stdout != 'running' or final_db_status.stdout != 'running'
   become: no
-

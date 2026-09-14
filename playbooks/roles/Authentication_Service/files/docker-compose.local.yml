@@ -1,0 +1,52 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:13
+    container_name: auth-db-local
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    ports:
+      - "127.0.0.1:${DB_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    image: ${DOCKER_IMAGE_STAGING}
+    container_name: auth-service-local
+    command: >
+      bash -c "
+      sleep 5 &&
+      flask db upgrade &&
+      flask run --host=0.0.0.0 --port=5002 --debug"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      - SQLALCHEMY_DATABASE_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${HOST_PORT}:5002"
+    volumes:
+      # Fixes UnboundLocalError on login when Galaxy isn't configured (no GALAXY_URL locally).
+      - ./patches/resources.py:/app/app/resources.py:ro
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: rejuve-services-net
+    external: true

@@ -1,0 +1,43 @@
+---
+# Set in the repo's root .env (see .env.example).
+local_base_dir: "{{ lookup('ansible.builtin.env', 'LOCAL_BASE_DIR') | default(ansible_env.HOME + '/services', true) }}"
+
+# Shared docker network so local services can reach each other by container name,
+# not just via published host ports. Matches the name the existing network role uses.
+local_docker_network: rejuve-services-net
+
+# Local-only host ports, distinct from staging/production and from each other.
+platform_ui_port: 3210
+platform_ui_hypothesis_ws_port: "{{ hypothesis_api_port }}"
+auth_host_port: 5006
+auth_db_port: 5437
+annotation_app_port: 5810
+annotation_mongodb_port: 27031
+annotation_redis_port: 6395
+annotation_caddy_port: 6110
+annotation_meili_port: 7710
+ai_assistant_flask_port: 5013
+ai_assistant_mongo_port: 27041
+ai_assistant_redis_port: 6398
+ai_assistant_qdrant_port: 6343
+ai_assistant_qdrant_grpc_port: 6344
+hypothesis_prolog_port: 4247
+hypothesis_dask_scheduler_port: 8796
+hypothesis_dask_dashboard_port: 8797
+hypothesis_api_port: 5018
+hypothesis_prefect_db_port: 5419
+hypothesis_credible_sets_db_port: 5421
+hypothesis_prefect_ui_port: 4297
+hypothesis_redis_port: 6319
+
+# Public prebuilt images - no GitHub credentials needed to deploy.
+platform_ui_image: "abdum1964/platform-ui:staging"
+auth_service_image: "abdum1964/auth-service:staging"
+annotation_image: "rejuvebio/annotation:staging"
+ai_assistant_image: "rejuvebio/ai-assistant:staging"
+hypothesis_prolog_image: "rejuvebio/hypothesis-generation-prolog-service:staging"
+hypothesis_dask_scheduler_image: "rejuvebio/hypothesis-generation-dask-scheduler:staging"
+hypothesis_dask_worker_image: "rejuvebio/hypothesis-generation-dask-worker:staging"
+hypothesis_api_image: "rejuvebio/hypothesis-generation-api-service:staging"
+hypothesis_prefect_service_image: "rejuvebio/hypothesis-generation-prefect-service:staging"
+hypothesis_prefect_deployment_image: "rejuvebio/hypothesis-generation-prefect-deployment:staging"

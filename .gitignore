@@ -1,0 +1,11 @@
+# Local secrets filled in by the deployer - never commit real values
+playbooks/roles/Authentication_Service/templates/.env
+playbooks/roles/annotation-query-backend/templates/env.j2
+playbooks/roles/AI_Assistant/templates/ai-assistant.env
+playbooks/roles/Hypothesis/templates/.env
+
+# Machine-specific overrides
+/.env
+
+# Python build artifacts
+__pycache__/

@@ -12,7 +12,7 @@
   hosts: annotation_Local
   tags: annotation_Local
   roles:
-    - Annotation
+    - annotation-query-backend
 
   # deploy_MORK
 - name: Deploy MORK Service
@@ -28,12 +28,26 @@
   roles:
     - Hypothesis
 
+  # deploy_authentication_service
+- name: Deploy Authentication Service
+  hosts: Authentication_Service_Local
+  tags: Authentication_Service_Local
+  roles:
+    - Authentication_Service
+
  # deploy_AI_Assistant
 - name: Deploy AI_Assistant
   hosts: AI_Assistant_Local
   tags: AI_Assistant_Local
   roles:
     - AI_Assistant
+
+  # deploy_platform_ui
+- name: Deploy Platform UI Service
+  hosts: Platform_UI_Local
+  tags: Platform_UI_Local
+  roles:
+    - Platform_UI
 
 # deploy_UI
 - name: Deploy UI Service
