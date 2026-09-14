@@ -1,42 +1,52 @@
-# Hypthesis Generation
+# Hypothesis Generation
 
 - name: Check prerequisites
-  command: "python3 {{ playbook_dir }}/prerequisite_check.py"
+  command: "python3 {{ playbook_dir }}/prerequisite_check_local.py"
   register: prerequisites_check
   failed_when: prerequisites_check.rc != 0
   changed_when: false
-  become: no  
+  become: no
+
+- name: Set hypothesis directory
+  set_fact:
+    hypothesis_dir: "{{ local_base_dir }}/hypothesis-generation-demo"
 
 - name: Ensure project directory exists
   file:
-    path: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo"
+    path: "{{ hypothesis_dir }}"
     state: directory
     mode: '0755'
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
   become: no
 
-- name: Clone Hypothesis repository
-  git:
-    repo: https://github.com/rejuve-bio/hypothesis-generation-demo.git
-    dest: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo"
-    version: staging
-    force: yes
-  become: no
-
 - name: Copy .env file
   template:
     src: ../templates/.env
-    dest: "{{ ansible_env.HOME }}/services/hypothesis-generation-demo/.env"
+    dest: "{{ hypothesis_dir }}/.env"
     mode: '0640'
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
   become: no
 
-- name: Run uv setup 
-  command: uv run setup.py
-  args:
-    chdir: "{{ playbook_dir }}/.."
+# Self-contained: prebuilt images only, no repo clone or GitHub credentials.
+- name: Copy docker-compose file
+  copy:
+    src: "files/docker-compose.local.yml"
+    dest: "{{ hypothesis_dir }}/docker-compose.yml"
+    mode: '0644'
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+  become: no
+
+# Bundled seed-loader scripts (public EBI data source, no repo access needed).
+- name: Copy seed-data loader scripts
+  copy:
+    src: "files/scripts/"
+    dest: "{{ hypothesis_dir }}/scripts/"
+    mode: '0644'
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
   become: no
 
 - name: Check for available Docker Compose command
@@ -66,9 +76,16 @@
       when: docker_compose_command == ''
       become: no
 
-- name: Pull staging images
+- name: Ensure shared local docker network exists
+  community.docker.docker_network:
+    name: "{{ local_docker_network }}"
+    state: present
+    ipam_config:
+      - subnet: 10.99.0.0/24
+
+- name: Pull prebuilt images
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/hypothesis-generation-demo && {{ docker_compose_command }} pull"
+    sg docker -c "cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local pull"
   args:
     executable: /bin/bash
   register: compose_pull
@@ -77,13 +94,117 @@
   until: compose_pull.rc == 0
   become: no
 
-- name: Build and start containers
+- name: Start containers
   shell: |
-    sg docker -c "cd {{ ansible_env.HOME }}/services/hypothesis-generation-demo && {{ docker_compose_command }} up --build -d"
+    sg docker -c "cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local up -d"
   args:
     executable: /bin/bash
   register: compose_up
   retries: 2
   delay: 10
   until: compose_up.rc == 0
-  become: no  # Run as user, sg docker handles group permissions
+  become: no
+
+- name: Wait for credible-sets-postgres to be healthy
+  community.docker.docker_container_info:
+    name: "{{ item }}"
+  register: db_health_check
+  until: db_health_check.container.State.Health.Status == "healthy"
+  retries: 12
+  delay: 10
+  loop:
+    - hypothesis-local-credible-sets-postgres-1
+  become: no
+  ignore_errors: yes
+
+- name: Seed credible sets data
+  shell: |
+    sg docker -c "cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local --profile tools run --rm credible-sets-loader"
+  args:
+    executable: /bin/bash
+  register: credible_sets_seed
+  changed_when: true
+  failed_when: false
+  become: no
+
+- name: Seed opentargets studies data
+  shell: |
+    sg docker -c "cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local --profile tools run --rm opentargets-studies-loader"
+  args:
+    executable: /bin/bash
+  register: opentargets_seed
+  changed_when: true
+  failed_when: false
+  become: no
+
+- name: Import demo hypothesis projects
+  shell: |
+    sg docker -c "docker exec hypothesis-local-api-service-1 python /app/scripts/seed_demo_projects.py"
+  register: gwas_demo_seed
+  changed_when: true
+  failed_when: false
+  become: no
+
+# Slow (~11,900 rows) - runs detached and logged, doesn't block the playbook.
+- name: Seed GWAS library in background
+  shell: |
+    sg docker -c "docker exec -d hypothesis-local-api-service-1 sh -c 'python /app/src/seed_database.py > /tmp/gwas_seed.log 2>&1'"
+  changed_when: true
+
+- name: Peek at GWAS seeding progress
+  shell: |
+    sg docker -c "docker exec hypothesis-local-api-service-1 tail -5 /tmp/gwas_seed.log"
+  register: gwas_seed_progress
+  changed_when: false
+  failed_when: false
+  become: no
+  become: no
+
+- name: Check api-service container status
+  community.docker.docker_container_info:
+    name: hypothesis-local-api-service-1
+  register: api_service_info
+  ignore_errors: yes
+  become: no
+
+- name: Get api-service logs if not running
+  command: "docker logs hypothesis-local-api-service-1 --tail 50"
+  register: api_service_logs
+  changed_when: false
+  when: api_service_info.container is not defined or api_service_info.container.State.Status != 'running'
+  become: no
+
+- name: Display api-service logs if deployment failed
+  debug:
+    var: api_service_logs.stdout_lines
+  when: api_service_info.container is not defined or api_service_info.container.State.Status != 'running'
+  become: no
+
+- name: Print Hypothesis deployment status
+  debug:
+    msg: |
+      {% if api_service_info.container is defined and api_service_info.container.State.Status == "running" %}
+      [OK] Hypothesis Generation deployed successfully and running:
+        - API: http://localhost:{{ hypothesis_api_port }}
+        - Prefect UI: http://localhost:{{ hypothesis_prefect_ui_port }}
+        - Dask dashboard: http://localhost:{{ hypothesis_dask_dashboard_port }}
+      {% if credible_sets_seed.rc != 0 or opentargets_seed.rc != 0 %}
+      [WARN] Seed data (credible-sets/opentargets) failed - check:
+        cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local --profile tools run --rm credible-sets-loader
+      {% endif %}
+      {% if gwas_demo_seed.rc != 0 %}
+      [WARN] Demo project import failed - check:
+        docker exec hypothesis-local-api-service-1 python /app/scripts/seed_demo_projects.py
+      {% endif %}
+      Deployment finished - you can use and test Hypothesis Generation now
+         (including the "Sample: Obesity" demo project) while the GWAS library
+         keeps seeding in the background (~11,900 rows, several hours).
+         Track it anytime:
+        docker exec hypothesis-local-api-service-1 tail -f /tmp/gwas_seed.log
+      Current progress:
+      {{ gwas_seed_progress.stdout | default('  (not started yet)', true) }}
+      {% else %}
+      [FAIL] Deployment incomplete: api-service is down.
+        - Check logs: cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local logs
+      {% endif %}
+  become: no
