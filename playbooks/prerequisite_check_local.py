@@ -5,6 +5,7 @@ import subprocess
 import sys
 import os
 import grp
+import getpass
 
 
 def ask_yes_no(question, default_no=True):
@@ -39,7 +40,7 @@ def detect_docker_group_membership():
         docker_group = grp.getgrnam("docker")
     except KeyError:
         return False
-    return os.getenv("USER") in docker_group.gr_mem
+    return getpass.getuser() in docker_group.gr_mem
 
 def detect_community_docker_collection():
     result = run(["ansible-galaxy", "collection", "list", "community.docker"])
@@ -72,7 +73,7 @@ def install_docker_group_membership():
             print(f"[FAIL] Failed to create docker group: {result.stderr}")
             return False
 
-    result = run(["sudo", "usermod", "-aG", "docker", os.getenv("USER")])
+    result = run(["sudo", "usermod", "-aG", "docker", getpass.getuser()])
     if result.returncode != 0:
         print(f"[FAIL] Failed to add user to docker group: {result.stderr}")
         return False
