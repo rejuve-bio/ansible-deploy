@@ -5,7 +5,7 @@ services:
     image: "${DOCKER_HUB_REPO}"
     container_name: annotation-service-local
     volumes:
-      - /mnt/hdd_1:/mnt/hdd_1:rw
+      - ${MORK_DATA_ROOT:-/mnt/hdd_1}:${MORK_DATA_ROOT:-/mnt/hdd_1}:rw
       - /dev/shm:/dev/shm
       - /var/run/docker.sock:/var/run/docker.sock
       # Shared with the celery workers - they write graph results here.
@@ -39,7 +39,7 @@ services:
     image: "${DOCKER_HUB_REPO}"
     container_name: celery-worker-fast-local
     volumes:
-      - /mnt/hdd_1:/mnt/hdd_1:rw
+      - ${MORK_DATA_ROOT:-/mnt/hdd_1}:${MORK_DATA_ROOT:-/mnt/hdd_1}:rw
       - /dev/shm:/dev/shm
       - /var/run/docker.sock:/var/run/docker.sock
       - annotation_public:/app/public
@@ -59,7 +59,7 @@ services:
     image: "${DOCKER_HUB_REPO}"
     container_name: celery-worker-slow-local
     volumes:
-      - /mnt/hdd_1:/mnt/hdd_1:rw
+      - ${MORK_DATA_ROOT:-/mnt/hdd_1}:${MORK_DATA_ROOT:-/mnt/hdd_1}:rw
       - /dev/shm:/dev/shm
       - /var/run/docker.sock:/var/run/docker.sock
       - annotation_public:/app/public
