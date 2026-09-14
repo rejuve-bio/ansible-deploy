@@ -6,11 +6,6 @@
   changed_when: false
   become: no
 
-- name: Gather installed packages facts
-  ansible.builtin.package_facts:
-    manager: auto
-  become: no
-
 - name: Set authentication service directory
   set_fact:
     auth_dir: "{{ local_base_dir }}/authentication-service"
