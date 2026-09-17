@@ -76,7 +76,7 @@ services:
       C_FORCE_ROOT: "1"
 
   mongodb:
-    image: mongo:latest
+    image: mongo:7.0
     container_name: annotation-mongodb-local
     volumes:
       - mongo_data:/data/db
