@@ -4,7 +4,9 @@ Run all 5 Rejuve Bio services on your own machine. Everything runs from public
 prebuilt Docker images - no GitHub credentials needed, no source to build.
 
 ## Prerequisites
-
+```
+sudo apt install ansible-core
+```
 Nothing to install by hand. The playbook checks for Docker, Docker Compose,
 and the `community.docker` Ansible collection, and offers to install
 anything missing (asking first - nothing installs without your say-so).
@@ -42,7 +44,7 @@ fill in your own values. The real file is gitignored and never committed.
 Nothing to fill in - no secrets involved.
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml --tags Platform_UI_Local
+ansible-playbook -vv  -i inventory/hosts.ini playbooks/deploy_server.yml --tags Platform_UI_Local
 ```
 
 ### Authentication Service
@@ -58,7 +60,7 @@ Fill in:
 - `MAIL_PASSWORD` - a Gmail app password, only needed for password-reset emails
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml --tags Authentication_Service_Local
+ansible-playbook -vv -i inventory/hosts.ini playbooks/deploy_server.yml --tags Authentication_Service_Local
 ```
 
 ### Annotation Service
@@ -76,7 +78,7 @@ Fill in:
 - `MORK_DATA_ROOT`, `MORK_DATA_DIR`, `FLY_MORK_DATA_DIR` - only if you have this dataset
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml --tags annotation_Local
+ansible-playbook -vv  -i inventory/hosts.ini playbooks/deploy_server.yml --tags annotation_Local
 ```
 
 ### Hypothesis Generation
@@ -94,7 +96,7 @@ Fill in:
 - `SWIPL_HOST`, `GO_LLM_URL`, `ANNOTATION_URL` - only if you run these external services
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml --tags hypothesis_Local
+ansible-playbook -vv -i inventory/hosts.ini playbooks/deploy_server.yml --tags hypothesis_Local
 ```
 
 ### AI Assistant
@@ -111,13 +113,13 @@ Fill in:
 - `NEO4J_PASSWORD` - your local Neo4j credentials
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml --tags AI_Assistant_Local
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml --tags AI_Assistant_Local
 ```
 
 ## 4. Or deploy everything at once
 
 ```bash
-ansible-playbook -i inventory/hosts.ini playbooks/deploy_server.yml \
+ansible-playbook -v -i inventory/hosts.ini playbooks/deploy_server.yml \
   --tags Platform_UI_Local,Authentication_Service_Local,annotation_Local,hypothesis_Local,AI_Assistant_Local
 ```
 
