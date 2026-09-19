@@ -38,7 +38,7 @@ services:
       - "127.0.0.1:${REDIS_PORT_HOST}:6379"
 
   mongodb:
-    image: mongo:6.0
+    image: mongo:7.0
     container_name: ai-assistant-mongodb-local
     restart: always
     ports:

@@ -31,8 +31,8 @@ hypothesis_prefect_ui_port: 4297
 hypothesis_redis_port: 6319
 
 # Public prebuilt images - no GitHub credentials needed to deploy.
-platform_ui_image: "abdum1964/platform-ui:staging"
-auth_service_image: "abdum1964/auth-service:staging"
+platform_ui_image: "rejuvebio/platform-ui:staging"
+auth_service_image: "rejuvebio/auth-service:staging"
 annotation_image: "rejuvebio/annotation:staging"
 ai_assistant_image: "rejuvebio/ai-assistant:staging"
 hypothesis_prolog_image: "rejuvebio/hypothesis-generation-prolog-service:staging"
