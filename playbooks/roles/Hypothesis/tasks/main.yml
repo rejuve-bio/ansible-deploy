@@ -49,6 +49,17 @@
     group: "{{ ansible_user_id }}"
   become: no
 
+# Code patches mounted over files baked into the prebuilt images
+# (llm.py: local Gemma via LLM_BASE_URL / LLM_API_KEY / LLM_MODEL).
+- name: Copy code patches
+  copy:
+    src: "files/patches/"
+    dest: "{{ hypothesis_dir }}/patches/"
+    mode: '0644'
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+  become: no
+
 - name: Check for available Docker Compose command
   block:
     - name: Check if docker compose v2 is available
@@ -117,9 +128,9 @@
   become: no
   ignore_errors: yes
 
-- name: Seed credible sets data
+- name: Seed credible sets data in background
   shell: |
-    sg docker -c "cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local --profile tools run --rm credible-sets-loader"
+    sg docker -c "cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local --profile tools run -d --name hypothesis-local-credible-sets-loader-bg --rm credible-sets-loader"
   args:
     executable: /bin/bash
   register: credible_sets_seed
@@ -127,9 +138,9 @@
   failed_when: false
   become: no
 
-- name: Seed opentargets studies data
+- name: Seed opentargets studies data in background
   shell: |
-    sg docker -c "cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local --profile tools run --rm opentargets-studies-loader"
+    sg docker -c "cd {{ hypothesis_dir }} && {{ docker_compose_command }} -p hypothesis-local --profile tools run -d --name hypothesis-local-opentargets-studies-loader-bg --rm opentargets-studies-loader"
   args:
     executable: /bin/bash
   register: opentargets_seed
@@ -137,9 +148,9 @@
   failed_when: false
   become: no
 
-- name: Import demo hypothesis projects
+- name: Import demo hypothesis projects in background
   shell: |
-    sg docker -c "docker exec hypothesis-local-api-service-1 python /app/scripts/seed_demo_projects.py"
+    sg docker -c "docker exec -d hypothesis-local-api-service-1 sh -c 'python /app/scripts/seed_demo_projects.py > /tmp/demo_projects_seed.log 2>&1'"
   register: gwas_demo_seed
   changed_when: true
   failed_when: false

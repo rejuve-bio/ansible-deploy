@@ -51,6 +51,9 @@ services:
 
   dask-worker:
     image: ${DASK_WORKER_IMAGE}
+    volumes:
+      # Patched llm.py (local Gemma support), missing from this image.
+      - ./patches/llm.py:/app/src/services/llm.py:ro
     env_file:
       - .env
     environment:
@@ -100,6 +103,8 @@ services:
     volumes:
       # Bundled manifest parsers (public data), missing from this image.
       - ./scripts:/app/scripts:ro
+      # Patched llm.py (local Gemma support), missing from this image.
+      - ./patches/llm.py:/app/src/services/llm.py:ro
     env_file:
       - .env
     environment:
@@ -184,7 +189,7 @@ services:
       credible-sets-postgres:
         condition: service_healthy
     command: >
-      sh -c "pip install --quiet psycopg2-binary pyarrow numpy &&
+      sh -c "pip install --quiet psycopg2-binary pyarrow numpy pandas &&
       python /scripts/load_credible_sets_to_postgres.py --release latest"
     restart: "no"
 
@@ -203,7 +208,7 @@ services:
       credible-sets-postgres:
         condition: service_healthy
     command: >
-      sh -c "pip install --quiet psycopg2-binary pyarrow numpy &&
+      sh -c "pip install --quiet psycopg2-binary pyarrow numpy pandas &&
       python /scripts/load_opentargets_studies.py --release latest"
     restart: "no"
 
@@ -234,6 +239,9 @@ services:
 
   prefect-deployment:
     image: ${PREFECT_DEPLOYMENT_IMAGE}
+    volumes:
+      # Patched llm.py (local Gemma support), missing from this image.
+      - ./patches/llm.py:/app/src/services/llm.py:ro
     deploy:
       resources:
         limits:
