@@ -89,6 +89,74 @@ def install_community_docker_collection():
     print(f"[FAIL] Install failed: {result.stderr}")
     return False
 
+# --- Resource check: computed from exactly which services are being deployed ---
+
+# Per-service footprint, keyed by its Ansible tag.
+SERVICES = {
+    "Platform_UI_Local":          {"label": "Platform UI",            "cpu": 1,  "ram_gb": 1,   "disk_gb": 2},
+    "Authentication_Service_Local": {"label": "Authentication Service", "cpu": 1,  "ram_gb": 1,   "disk_gb": 1},
+    "annotation_Local":           {"label": "Annotation",             "cpu": 7,  "ram_gb": 7,   "disk_gb": 7},
+    "AI_Assistant_Local":         {"label": "AI Assistant",           "cpu": 4,  "ram_gb": 4,   "disk_gb": 5},
+    "hypothesis_Local":           {"label": "Hypothesis Generation",  "cpu": 32, "ram_gb": 96,  "disk_gb": 81},
+    "Galaxy_Local":               {"label": "Galaxy",                 "cpu": 10, "ram_gb": 20,  "disk_gb": 1700},
+}
+
+
+def detect_ram_gb():
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) / (1024 * 1024)
+    except (FileNotFoundError, ValueError):
+        pass
+    return None
+
+
+def check_resources():
+    cpu_count = os.cpu_count() or 1
+    ram_gb = detect_ram_gb()
+    disk_free_gb = shutil.disk_usage(os.path.expanduser("~")).free / (1024 ** 3)
+
+    # Services being deployed, passed in as ansible_run_tags; none means "all".
+    requested_tags = sys.argv[1].split(",") if len(sys.argv) > 1 and sys.argv[1] else []
+    requested = [t for t in requested_tags if t in SERVICES] or list(SERVICES)
+
+    need_cpu = sum(SERVICES[t]["cpu"] for t in requested)
+    need_ram = sum(SERVICES[t]["ram_gb"] for t in requested)
+    need_disk = sum(SERVICES[t]["disk_gb"] for t in requested)
+
+    print("Checking machine resources...")
+    print("=" * 60)
+    print(f"  CPU cores:  {cpu_count}")
+    print(f"  RAM:        {f'{ram_gb:.0f} GB' if ram_gb else 'could not detect'}")
+    print(f"  Free disk:  {disk_free_gb:.0f} GB")
+    print()
+    print(f"Deploying: {', '.join(SERVICES[t]['label'] for t in requested)}")
+    print(f"  Needs:  {need_cpu}+ cores, {need_ram}+ GB RAM, {need_disk}+ GB disk")
+    print()
+
+    short = []
+    if cpu_count < need_cpu:
+        short.append(f"CPU: have {cpu_count} cores, need {need_cpu}+")
+    if ram_gb is not None and ram_gb < need_ram:
+        short.append(f"RAM: have {ram_gb:.0f} GB, need {need_ram}+ GB")
+    if disk_free_gb < need_disk:
+        short.append(f"Disk: have {disk_free_gb:.0f} GB free, need {need_disk}+ GB")
+
+    if not short:
+        print("[OK] This machine has enough resources for what's being deployed.\n")
+        return
+
+    heaviest = max(requested, key=lambda t: SERVICES[t]["ram_gb"])
+    print("[FAIL] Not enough resources for what you're trying to deploy:\n")
+    for s in short:
+        print(f"  - {s}")
+    print(f"\n{SERVICES[heaviest]['label']} is the main driver of this requirement.")
+    print("Deploy a lighter combination of services instead, or use a bigger machine.")
+    sys.exit(1)
+
+
 # --- Orchestration ---
 
 ITEMS = [
@@ -109,6 +177,8 @@ ITEMS = [
 
 
 def main():
+    check_resources()
+
     print("Checking prerequisites...")
     print("=" * 60)
 

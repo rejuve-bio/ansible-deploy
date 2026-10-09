@@ -1,6 +1,6 @@
 ---
 - name: Check prerequisites
-  command: "python3 {{ playbook_dir }}/prerequisite_check_local.py"
+  command: "python3 {{ playbook_dir }}/prerequisite_check_local.py {{ ansible_run_tags | join(',') }}"
   register: prerequisites_check
   failed_when: prerequisites_check.rc != 0
   changed_when: false
@@ -45,7 +45,7 @@
     restart_policy: unless-stopped
     env_file: "{{ platform_ui_dir }}/.env"
     ports:
-      - "127.0.0.1:{{ platform_ui_port }}:3000"
+      - "0.0.0.0:{{ platform_ui_port }}:3000"
     networks:
       - name: "{{ local_docker_network }}"
 
