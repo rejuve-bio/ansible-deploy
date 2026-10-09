@@ -1,7 +1,7 @@
 # Hypothesis Generation
 
 - name: Check prerequisites
-  command: "python3 {{ playbook_dir }}/prerequisite_check_local.py"
+  command: "python3 {{ playbook_dir }}/prerequisite_check_local.py {{ ansible_run_tags | join(',') }}"
   register: prerequisites_check
   failed_when: prerequisites_check.rc != 0
   changed_when: false
