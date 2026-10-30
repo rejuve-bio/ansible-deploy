@@ -9,3 +9,10 @@ playbooks/roles/Hypothesis/templates/.env
 
 # Python build artifacts
 __pycache__/
+
+# Docker-rules / threat-scan: real secrets and host-specific runtime state - never commit
+security/docker-rules/config/mail.env
+security/docker-rules/state/
+security/docker-rules/logs/
+security/threat-scan/state/
+security/threat-scan/logs/

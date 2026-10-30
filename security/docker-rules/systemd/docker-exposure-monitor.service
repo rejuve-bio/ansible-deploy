@@ -1,0 +1,6 @@
+[Unit]
+Description=Docker 0.0.0.0 exposure monitor (one-shot check)
+
+[Service]
+Type=oneshot
+ExecStart=/home/abdum/services/security/docker-rules/bin/monitor.py

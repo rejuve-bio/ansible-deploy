@@ -1,0 +1,10 @@
+[Unit]
+Description=Run docker-exposure-monitor every 30s (must be frequent enough to enforce the 2-minute grace period on time)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

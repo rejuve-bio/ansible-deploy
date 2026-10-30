@@ -1,0 +1,15 @@
+#!/bin/bash
+# Immediately blocks a Docker container's port using iptables and
+# removes it from the allowlist.
+set -e
+if [ $# -ne 2 ]; then echo "Usage: docker-exposure-deny <container> <port>"; exit 1; fi
+CONTAINER="$1"; PORT="$2"
+ALLOWLIST=/home/abdum/services/security/docker-rules/config/allowlist.conf
+IP=$(docker inspect "$CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null)
+CPORT=$(docker port "$CONTAINER" 2>/dev/null | grep ":$PORT\$" | sed 's#/tcp.*##')
+CPORT="${CPORT:-$PORT}"
+if [ -z "$IP" ]; then echo "Could not find $CONTAINER -- is it running?"; exit 1; fi
+iptables -C DOCKER-USER -d "$IP" -p tcp --dport "$CPORT" -j DROP 2>/dev/null || \
+  iptables -I DOCKER-USER -d "$IP" -p tcp --dport "$CPORT" -j DROP
+sed -i "/^${CONTAINER}:${PORT}$/d" "$ALLOWLIST" 2>/dev/null || true
+echo "Blocked ${CONTAINER}:${PORT} (internal ${IP}:${CPORT}) immediately."
