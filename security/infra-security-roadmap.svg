@@ -1,0 +1,292 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 3150" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1000" height="3150" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="30" y="35" font-size="20" font-weight="700" fill="#111827">Service &amp; server infrastructure security — current state and roadmap (updated)</text>
+
+  <!-- Legend -->
+  <g font-size="13" fill="#374151">
+    <rect x="30" y="50" width="16" height="16" rx="3" fill="#d1fae5" stroke="#10b981"/>
+    <text x="52" y="63">Implemented</text>
+    <rect x="160" y="50" width="16" height="16" rx="3" fill="#fef3c7" stroke="#f59e0b"/>
+    <text x="182" y="63">Planned</text>
+    <rect x="270" y="50" width="16" height="16" rx="3" fill="#fee2e2" stroke="#ef4444"/>
+    <text x="292" y="63">Gap / risk identified</text>
+    <rect x="430" y="50" width="16" height="16" rx="3" fill="#dbeafe" stroke="#3b82f6"/>
+    <text x="452" y="63">Fixed this session (2026-07-05)</text>
+  </g>
+
+  <!-- ============ SECTION 1: Perimeter & routing ============ -->
+  <g>
+    <rect x="20" y="85" width="960" height="1220" rx="10" fill="#fafafa" stroke="#e5e7eb"/>
+    <text x="40" y="112" font-size="15" font-weight="700" fill="#111827">1. Perimeter &amp; routing</text>
+
+    <!-- Internet -->
+    <foreignObject x="420" y="125" width="160" height="36">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#e5e7eb;border:1px solid #9ca3af;border-radius:6px;height:100%;display:flex;align-items:center;justify-content:center;font-size:13px;color:#374151;">Internet</div>
+    </foreignObject>
+    <line x1="500" y1="161" x2="500" y2="180" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <!-- UFW + fail2ban -->
+    <foreignObject x="300" y="182" width="240" height="60">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#065f46;">
+        <b>UFW firewall — done</b><br/>Default deny, only required ports open
+      </div>
+    </foreignObject>
+    <line x1="540" y1="212" x2="620" y2="212" stroke="#f59e0b" marker-end="url(#arrow)"/>
+    <foreignObject x="622" y="182" width="220" height="60">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#92400e;">
+        <b>fail2ban — planned</b><br/>Watches auth logs, bans into UFW
+      </div>
+    </foreignObject>
+
+    <line x1="420" y1="242" x2="420" y2="262" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <!-- Nginx -->
+    <foreignObject x="300" y="264" width="240" height="50">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#065f46;">
+        <b>Nginx — done</b><br/>TLS termination, routes by port / path
+      </div>
+    </foreignObject>
+
+    <line x1="360" y1="314" x2="230" y2="340" stroke="#6b7280" marker-end="url(#arrow)"/>
+    <line x1="480" y1="314" x2="700" y2="340" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <!-- Platform/app vs Kubernetes -->
+    <foreignObject x="70" y="342" width="320" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#dbeafe;border:1px solid #3b82f6;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#1e3a8a;">
+        <b>Platform + app services (Docker)</b><br/>One public port per service today
+      </div>
+    </foreignObject>
+    <foreignObject x="580" y="342" width="320" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#dbeafe;border:1px solid #3b82f6;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#1e3a8a;">
+        <b>Kubernetes services</b><br/>Exposed via NodePort
+      </div>
+    </foreignObject>
+
+    <line x1="500" y1="397" x2="500" y2="417" stroke="#ef4444" marker-end="url(#arrow)"/>
+
+    <!-- NEW critical finding -->
+    <foreignObject x="60" y="419" width="880" height="95">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fee2e2;border:1.5px solid #ef4444;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#991b1b;">
+        <b>Critical gap found: Docker + Kubernetes NodePorts bypass UFW entirely.</b><br/>
+        Docker/kube-proxy write DNAT rules directly into iptables (<code>FORWARD</code> chain) before traffic ever reaches UFW's <code>INPUT</code>-chain policy. A container/NodePort published on <code>0.0.0.0</code> is reachable from the internet <i>regardless</i> of UFW's allow/deny state. Discovered via a backend (port 8006) that stayed open even after its UFW rule was deleted.
+      </div>
+    </foreignObject>
+
+    <line x1="500" y1="516" x2="500" y2="536" stroke="#3b82f6" marker-end="url(#arrow)"/>
+
+    <!-- Fixed status -->
+    <foreignObject x="60" y="538" width="880" height="90">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#dbeafe;border:1.5px solid #3b82f6;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#1e3a8a;">
+        <b>Fixed this session: 11 Docker-published backends firewalled via <code>DOCKER-USER</code> chain</b><br/>
+        Platform UI, ALIS, Auth, Grafana, Infisical, kg-service, MCP (x2), Uptime Kuma, Hypothesis API, bio-semantic-parser. Rules match the <i>post-DNAT</i> container IP:port, scoped to the public interface only — verified nginx access unaffected (baseline vs. after comparison on every path). Full detail: <code>port-security-hardening-notes.md</code>.
+      </div>
+    </foreignObject>
+
+    <line x1="500" y1="628" x2="500" y2="648" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <!-- Galaxy pending -->
+    <foreignObject x="60" y="650" width="880" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;height:100%;padding:6px 12px;box-sizing:border-box;font-size:12.5px;color:#92400e;">
+        <b>Pending: Galaxy (port 9094)</b> — not found in Docker's port list; may be a native process or a <code>--network host</code> container (looks identical from outside). Exposure mechanism unconfirmed — needs <code>lsof -i :9094</code> before deciding UFW vs. iptables fix.
+      </div>
+    </foreignObject>
+
+    <line x1="500" y1="705" x2="500" y2="725" stroke="#ef4444" marker-end="url(#arrow)"/>
+
+    <!-- NodePort risk -->
+    <foreignObject x="60" y="727" width="880" height="80">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fee2e2;border:1.5px solid #ef4444;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#991b1b;">
+        <b>Not yet fixed: 5 Kubernetes NodePorts still directly public</b><br/>
+        Ports 30501/30502/30503/30504 (Annotation, AI Assistant, two unlabeled services) and 30443 (Kubernetes Dashboard). No Docker-style admin override chain exists for kube-proxy, and kube-proxy re-syncs its own rules — a naive copy of the Docker fix risks silently no-op'ing.
+      </div>
+    </foreignObject>
+
+    <line x1="500" y1="807" x2="500" y2="827" stroke="#f59e0b" marker-end="url(#arrow)"/>
+
+    <!-- Planned k8s fix -->
+    <foreignObject x="60" y="829" width="880" height="95">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#92400e;">
+        <b>Planned fix: convert Service type NodePort → ClusterIP</b><br/>
+        Removes the public port entirely rather than firewalling around kube-proxy. Nginx (running on the same cluster node) proxies directly to the ClusterIP, matching the same "single door through nginx" pattern already used for Docker services. Add nginx path (e.g. <code>dev.rejuve.bio/kubernetes</code>) for consolidation <i>together with</i> this change — the path alone does not close the NodePort.
+      </div>
+    </foreignObject>
+
+    <line x1="500" y1="924" x2="500" y2="944" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <!-- Existing gap: too many ports -->
+    <foreignObject x="60" y="946" width="880" height="65">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fee2e2;border:1px solid #ef4444;border-radius:6px;height:100%;padding:6px 12px;box-sizing:border-box;font-size:12.5px;color:#991b1b;">
+        <b>Gap: 20+ public ports, one per service</b> (separate from the exposure bug above — these are intentionally nginx-fronted). Planned: consolidate to path-/subdomain-based routing behind 443 where the app supports being served from a subpath.
+      </div>
+    </foreignObject>
+
+    <line x1="500" y1="1011" x2="500" y2="1031" stroke="#ef4444" marker-end="url(#arrow)"/>
+
+    <!-- Persistence risk -->
+    <foreignObject x="60" y="1033" width="880" height="65">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fee2e2;border:1px solid #ef4444;border-radius:6px;height:100%;padding:6px 12px;box-sizing:border-box;font-size:12.5px;color:#991b1b;">
+        <b>Risk: tonight's iptables rules are not persistent.</b> A reboot silently reopens all 11 fixed services — no alert. Needs <code>iptables-persistent</code>/<code>netfilter-persistent</code> or a startup unit before this can be considered done.
+      </div>
+    </foreignObject>
+  </g>
+
+  <!-- ============ SECTION 2: Admin & secrets tool access ============ -->
+  <g>
+    <rect x="20" y="1325" width="960" height="430" rx="10" fill="#fafafa" stroke="#e5e7eb"/>
+    <text x="40" y="1352" font-size="15" font-weight="700" fill="#111827">2. Admin &amp; secrets tool access</text>
+
+    <foreignObject x="400" y="1365" width="200" height="36">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:#065f46;">Nginx (from section 1)</div>
+    </foreignObject>
+    <line x1="500" y1="1401" x2="500" y2="1421" stroke="#ef4444" marker-end="url(#arrow)"/>
+
+    <foreignObject x="220" y="1423" width="560" height="65">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fee2e2;border:1.5px solid #ef4444;border-radius:6px;height:100%;padding:6px 12px;box-sizing:border-box;font-size:12.5px;color:#991b1b;text-align:center;">
+        <b>Current: direct public route</b><br/>Infisical, K8s dashboard, Grafana, Kuma — only their own app login gates access
+      </div>
+    </foreignObject>
+
+    <line x1="330" y1="1488" x2="330" y2="1508" stroke="#6b7280" marker-end="url(#arrow)"/>
+    <line x1="500" y1="1488" x2="500" y2="1508" stroke="#6b7280" marker-end="url(#arrow)"/>
+    <line x1="670" y1="1488" x2="670" y2="1508" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <foreignObject x="240" y="1510" width="160" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#e5e7eb;border:1px solid #9ca3af;border-radius:6px;height:100%;padding:6px;box-sizing:border-box;font-size:12px;color:#374151;text-align:center;"><b>Infisical</b><br/>Secrets store</div>
+    </foreignObject>
+    <foreignObject x="420" y="1510" width="160" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#e5e7eb;border:1px solid #9ca3af;border-radius:6px;height:100%;padding:6px;box-sizing:border-box;font-size:12px;color:#374151;text-align:center;"><b>K8s dashboard</b><br/>Cluster control — highest blast radius</div>
+    </foreignObject>
+    <foreignObject x="600" y="1510" width="160" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#e5e7eb;border:1px solid #9ca3af;border-radius:6px;height:100%;padding:6px;box-sizing:border-box;font-size:12px;color:#374151;text-align:center;"><b>Grafana / Kuma</b><br/>Monitoring UIs</div>
+    </foreignObject>
+
+    <line x1="500" y1="1565" x2="500" y2="1585" stroke="#f59e0b" marker-end="url(#arrow)"/>
+
+    <foreignObject x="150" y="1587" width="700" height="80">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#92400e;text-align:center;">
+        <b>Planned: auth gateway</b> — IP allowlist or oauth2-proxy, ideally VPN-only.<br/>
+        Quick-win: Tailscale already installed on this host — scope nginx <code>allow</code>/<code>deny</code> to the Tailscale range for these four services instead of building oauth2-proxy from scratch.
+      </div>
+    </foreignObject>
+
+    <text x="500" y="1690" font-size="12" fill="#6b7280" text-anchor="middle">Priority: fix Kubernetes Dashboard first — dashboard compromise = full cluster compromise.</text>
+  </g>
+
+  <!-- ============ SECTION 3: Observability pipeline ============ -->
+  <g>
+    <rect x="20" y="1780" width="960" height="440" rx="10" fill="#fafafa" stroke="#e5e7eb"/>
+    <text x="40" y="1807" font-size="15" font-weight="700" fill="#111827">3. Observability pipeline</text>
+
+    <foreignObject x="70" y="1825" width="220" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#065f46;"><b>Promtail — done</b><br/>Ships logs from hosts</div>
+    </foreignObject>
+    <line x1="290" y1="1852" x2="330" y2="1852" stroke="#6b7280" marker-end="url(#arrow)"/>
+    <foreignObject x="332" y="1825" width="200" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#065f46;"><b>Loki — done</b><br/>Log storage</div>
+    </foreignObject>
+
+    <foreignObject x="70" y="1895" width="220" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#065f46;"><b>Prometheus — done</b><br/>Scrapes metrics</div>
+    </foreignObject>
+    <line x1="290" y1="1922" x2="330" y2="1922" stroke="#6b7280" marker-end="url(#arrow)"/>
+    <foreignObject x="332" y="1895" width="200" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#065f46;"><b>Metrics storage — done</b><br/>Time-series data</div>
+    </foreignObject>
+
+    <line x1="534" y1="1852" x2="620" y2="1880" stroke="#6b7280" marker-end="url(#arrow)"/>
+    <line x1="534" y1="1922" x2="620" y2="1895" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <foreignObject x="622" y="1860" width="280" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#dbeafe;border:1px solid #3b82f6;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12.5px;color:#1e3a8a;"><b>Grafana — done</b><br/>Dashboards, single access point</div>
+    </foreignObject>
+
+    <line x1="762" y1="1915" x2="762" y2="1935" stroke="#ef4444" marker-end="url(#arrow)"/>
+    <line x1="290" y1="1950" x2="720" y2="1950" stroke="#ef4444" marker-end="url(#arrow)" stroke-dasharray="3,3"/>
+
+    <foreignObject x="70" y="1937" width="220" height="70">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fee2e2;border:1px solid #ef4444;border-radius:6px;height:100%;padding:6px 10px;box-sizing:border-box;font-size:12px;color:#991b1b;"><b>Gap: coverage check needed</b><br/>Confirm UFW, SSH auth, fail2ban events flow into pipeline</div>
+    </foreignObject>
+
+    <line x1="500" y1="1990" x2="500" y2="2010" stroke="#f59e0b" marker-end="url(#arrow)"/>
+
+    <foreignObject x="150" y="2012" width="700" height="70">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#92400e;text-align:center;">
+        <b>New — planned: firewall drop logging.</b> Add an iptables <code>LOG</code> rule just before each <code>DOCKER-USER</code> DROP, so probes against the now-blocked ports (8006, 3009, 3002, etc.) surface in Loki/Grafana instead of vanishing silently.
+      </div>
+    </foreignObject>
+
+    <text x="500" y="2110" font-size="11.5" fill="#6b7280" text-anchor="middle">Note: Grafana is also reached through the admin/secrets path in section 2 — the planned auth gateway applies here too.</text>
+  </g>
+
+  <!-- ============ SECTION 4: CI/CD security pipeline ============ -->
+  <g>
+    <rect x="20" y="2245" width="960" height="470" rx="10" fill="#fafafa" stroke="#e5e7eb"/>
+    <text x="40" y="2272" font-size="15" font-weight="700" fill="#111827">4. CI/CD security pipeline</text>
+
+    <foreignObject x="400" y="2285" width="200" height="36">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#e5e7eb;border:1px solid #9ca3af;border-radius:6px;height:100%;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:#374151;">Code commit</div>
+    </foreignObject>
+    <line x1="500" y1="2321" x2="500" y2="2341" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <foreignObject x="350" y="2343" width="300" height="45">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:12.5px;color:#065f46;"><b>SonarQube — done</b><span>Code quality gate</span></div>
+    </foreignObject>
+    <line x1="500" y1="2388" x2="500" y2="2408" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <foreignObject x="350" y="2410" width="300" height="45">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:12.5px;color:#065f46;"><b>Trivy + secret scan — done</b><span>Image vulnerabilities, leaked secrets</span></div>
+    </foreignObject>
+    <line x1="500" y1="2455" x2="500" y2="2475" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <foreignObject x="350" y="2477" width="300" height="45">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:12.5px;color:#92400e;"><b>IaC scan — planned</b><span>Checkov / tfsec on manifests</span></div>
+    </foreignObject>
+    <line x1="500" y1="2522" x2="500" y2="2542" stroke="#6b7280" marker-end="url(#arrow)"/>
+
+    <foreignObject x="350" y="2544" width="300" height="45">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#d1fae5;border:1px solid #10b981;border-radius:6px;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:12.5px;color:#065f46;"><b>Smoke test — done</b><span>Confirms build runs before deploy</span></div>
+    </foreignObject>
+    <line x1="500" y1="2589" x2="500" y2="2609" stroke="#3b82f6" marker-end="url(#arrow)"/>
+
+    <foreignObject x="330" y="2611" width="340" height="55">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#dbeafe;border:1.5px solid #3b82f6;border-radius:6px;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:12.5px;color:#1e3a8a;text-align:center;"><b>Signed artifacts — done</b><span>cosign signing before deploy (corrected: previously listed as planned)</span></div>
+    </foreignObject>
+
+    <text x="500" y="2695" font-size="11.5" fill="#6b7280" text-anchor="middle">Correction from prior version: secret scanning and cosign image signing are both already implemented.</text>
+  </g>
+
+  <!-- ============ SECTION 5: Host hardening (new) ============ -->
+  <g>
+    <rect x="20" y="2745" width="960" height="330" rx="10" fill="#fafafa" stroke="#e5e7eb"/>
+    <text x="40" y="2772" font-size="15" font-weight="700" fill="#111827">5. Host hardening (new section)</text>
+
+    <foreignObject x="70" y="2790" width="420" height="90">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#92400e;">
+        <b>SSH hardening — planned</b><br/>Key-only authentication, disable password auth. Complements the planned fail2ban (section 1) — fail2ban slows brute force, disabling password auth removes the attack surface outright.
+      </div>
+    </foreignObject>
+
+    <foreignObject x="510" y="2790" width="420" height="90">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#92400e;">
+        <b>Automatic OS security updates — planned</b><br/><code>unattended-upgrades</code> for the host OS, independent of the CI/CD pipeline's application-layer scanning (section 4).
+      </div>
+    </foreignObject>
+
+    <foreignObject x="70" y="2895" width="860" height="70">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="background:#fee2e2;border:1px solid #ef4444;border-radius:6px;height:100%;padding:8px 12px;box-sizing:border-box;font-size:12.5px;color:#991b1b;">
+        <b>Reminder: persistence gap from section 1 applies here too</b> — any host-hardening step should be paired with confirming it (and the DOCKER-USER rules) survive a reboot before being marked "done."
+      </div>
+    </foreignObject>
+  </g>
+
+  <text x="30" y="3130" font-size="11" fill="#6b7280">Diagram reflects state as of 2026-07-05, including the port-exposure audit performed this session (11 backends fixed via DOCKER-USER; Galaxy and 5 Kubernetes NodePorts pending).</text>
+  <text x="30" y="3145" font-size="11" fill="#6b7280">Blue "fixed this session" items are new since the prior version of this diagram. Amber/red items are proposed next steps, not yet built.</text>
+</svg>
