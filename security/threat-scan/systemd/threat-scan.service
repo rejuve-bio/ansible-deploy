@@ -1,0 +1,6 @@
+[Unit]
+Description=Hourly host threat scan (cryptominer/ransomware/SUID) -- independent of docker-exposure-monitor
+
+[Service]
+Type=oneshot
+ExecStart=/home/abdum/services/security/threat-scan/bin/scan.py

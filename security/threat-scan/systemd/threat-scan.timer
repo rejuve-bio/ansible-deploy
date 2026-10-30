@@ -1,0 +1,10 @@
+[Unit]
+Description=Run threat-scan every hour
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
