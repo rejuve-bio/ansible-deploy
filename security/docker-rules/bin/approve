@@ -1,0 +1,11 @@
+#!/bin/bash
+# Immediately adds a Docker container's port to the allowlist and
+# triggers the monitor to remove any existing block.
+set -e
+if [ $# -ne 2 ]; then echo "Usage: docker-exposure-approve <container> <port>"; exit 1; fi
+KEY="${1}:${2}"
+ALLOWLIST=/home/abdum/services/security/docker-rules/config/allowlist.conf
+grep -qxF "$KEY" "$ALLOWLIST" 2>/dev/null || echo "$KEY" >> "$ALLOWLIST"
+echo "Added $KEY to allowlist."
+/home/abdum/services/security/docker-rules/bin/monitor.py
+echo "Monitor run triggered -- any existing block should now be removed."
